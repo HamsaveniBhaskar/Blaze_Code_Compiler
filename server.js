@@ -1,45 +1,23 @@
-import express from 'express';
-import bodyParser from 'body-parser';
-import fetch from 'node-fetch';
-
-const app = express();
-const PORT = 3000;
-
-app.use(bodyParser.json());
-
-app.post('/run', async (req, res) => {
-    const { code, input } = req.body;
-
-    const payload = {
-        script: code,
-        stdin: input,
-        language: 'cpp',
-        versionIndex: '4',
-        clientId: '55cb4c52637421b614ede04cb699621c',
-        clientSecret: 'f5bbd5c65222f1848c47c4febc99948c113fabcbfe8d4d2214345567aad681f9',
-    };
-
-    try {
-        const response = await fetch('https://api.jdoodle.com/v1/execute', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-            throw new Error(`API Error: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        res.json(data);
-    } catch (error) {
-        console.error('Error:', error.message);
-        res.status(500).json({ error: 'Error executing code. Try again later.' });
-    }
-});
-
-app.use(express.static('C:/Users/hamsa/Music/Blaze Code Compilers'));
-
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+==> Cloning from https://github.com/HamsaveniBhaskar/Blaze_Code_Compiler
+==> Checking out commit b32964ad5fd4aedbd94c2a1e53df0bf2bd519ef3 in branch main
+==> Using Node.js version 22.11.0 (default)
+==> Docs on specifying a Node.js version: https://render.com/docs/node-version
+==> Using Bun version 1.1.0 (default)
+==> Docs on specifying a bun version: https://render.com/docs/bun-version
+==> Running build command 'npm install'...
+added 78 packages, and audited 79 packages in 3s
+20 packages are looking for funding
+  run `npm fund` for details
+found 0 vulnerabilities
+==> Uploading build...
+==> Build uploaded in 8s
+==> Build successful 🎉
+==> Deploying...
+==> Running 'node server.js'
+Server running on http://localhost:3000
+==> New primary port detected: 3000. Restarting deploy to update network configuration...
+==> Docs on specifying a port: https://render.com/docs/web-services#port-binding
+==> Running 'node server.js'
+Server running on http://localhost:3000
+==> Your service is live 🎉
+==> Detected a new open port HTTP:3000
