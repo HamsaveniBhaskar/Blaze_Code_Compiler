@@ -1,11 +1,14 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import fetch from 'node-fetch';
+import cors from 'cors';  // Import cors
 
 const app = express();
 
-// Use the PORT environment variable or default to 3000 for local development
-const PORT = process.env.PORT || 3000;
+// Enable CORS for all origins (or specify specific ones if needed)
+app.use(cors());
+
+const PORT = process.env.PORT || 10000;
 
 app.use(bodyParser.json());
 
@@ -40,9 +43,6 @@ app.post('/run', async (req, res) => {
     }
 });
 
-app.use(express.static('C:/Users/hamsa/Music/Blaze Code Compilers'));
-
-// Dynamically bind to the port
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
 });
