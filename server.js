@@ -1,9 +1,14 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+import express from 'express';
+import bodyParser from 'body-parser';
+import fetch from 'node-fetch';
+import cors from 'cors';  // Correct import for ES Modules
 
 const app = express();
-const PORT = 3000;
+
+// Enable CORS for all origins (or specify a list of allowed origins)
+app.use(cors());
+
+const PORT = process.env.PORT || 10000;
 
 app.use(bodyParser.json());
 
@@ -37,8 +42,6 @@ app.post('/run', async (req, res) => {
         res.status(500).json({ error: 'Error executing code. Try again later.' });
     }
 });
-
-app.use(express.static('C:/Users/hamsa/Music/Blaze Code Compilers'));
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
