@@ -1,6 +1,6 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import fetch from 'node-fetch'; // To make API requests
+import fetch from 'node-fetch'; // For making API requests
 import cors from 'cors'; // To handle cross-origin requests
 
 const app = express();
@@ -16,11 +16,11 @@ app.post('/run', async (req, res) => {
     const { code, input } = req.body; // Extract code and input from the request
 
     const payload = {
-        client_id: 'a541184058b69e0ad3f768b4b0a66db2590bc5193fdf.api.hackerearth.com', // HackerEarth Client ID
-        client_secret: '7b09b380c9e085844b56ef67e59a4ceb2f45e70e', // HackerEarth Client Secret Key
+        client_id: '9a4ad25166a556295e35a98005992a34be7ca789b9f4.api.hackerearth.com', // HackerEarth Client ID
+        client_secret: '19b9a4ac7f22af170ad74461e87feb999aace545', // HackerEarth Client Secret Key
         script: code, // The C++ code to execute
         stdin: input, // Input for the code
-        lang: 'CPP17', // Specify C++17 as the language
+        lang: 'CPP', // Specify C++ as the language (CPP is the correct identifier)
         time_limit: 5, // Execution time limit in seconds
         memory_limit: 262144, // Memory limit in KB (256 MB)
     };
@@ -31,15 +31,14 @@ app.post('/run', async (req, res) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'client-secret': '7b09b380c9e085844b56ef67e59a4ceb2f45e70e', // Client secret
             },
             body: JSON.stringify(payload), // Send the payload as JSON
         });
 
         // Check if the response from the API is successful
         if (!response.ok) {
-            const errorMessage = await response.text();
-            console.error(`HackerEarth API error: ${response.status} ${response.statusText} - ${errorMessage}`);
+            const errorMessage = `HackerEarth API error: ${response.statusText}`;
+            console.error(errorMessage);
             throw new Error(errorMessage);
         }
 
