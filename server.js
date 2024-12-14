@@ -1,59 +1,58 @@
-import express from 'express';
-import bodyParser from 'body-parser';
-import fetch from 'node-fetch';
-import cors from 'cors';
+const express = require('express');
+const { exec } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
 
 const app = express();
+const PORT = 3000;
 
-// Enable CORS for all origins (or specify allowed origins)
 app.use(cors());
+app.use(express.json());
 
-// Middleware to parse JSON request bodies
-app.use(bodyParser.json());
+const execPromise = (command) => {
+    return new Promise((resolve, reject) => {
+        exec(command, (error, stdout, stderr) => {
+            if (error) {
+                reject({ error, stderr });
+            } else {
+                resolve({ stdout, stderr });
+            }
+        });
+    });
+};
 
-// POST endpoint to execute C++ code
-app.post('/run', async (req, res) => {
-    const { code, input } = req.body; // Extract code and input from the request
+app.post('/', async (req, res) => {
+    const { code, input } = req.body;
 
-    const payload = {
-        client_id: '9a4ad25166a556295e35a98005992a34be7ca789b9f4.api.hackerearth.com', // HackerEarth Client ID
-        client_secret: '19b9a4ac7f22af170ad74461e87feb999aace545', // HackerEarth Client Secret Key
-        script: code, // The C++ code to execute
-        stdin: input, // Input for the code
-        lang: 'CPP17', // Specify C++17 as the language (if CPP is causing issues)
-        time_limit: 5, // Execution time limit in seconds
-        memory_limit: 262144, // Memory limit in KB (256 MB)
-    };
+    if (!code) {
+        return res.status(400).json({ output: 'Error: No code provided!' });
+    }
+
+    const sourceFile = path.join(__dirname, 'temp.cpp');
+    const executable = path.join(__dirname, 'temp.exe');
+    const outputFile = path.join(__dirname, 'output.txt');
+
+    fs.writeFileSync(sourceFile, code);
 
     try {
-        // Make a POST request to HackerEarth API
-        const response = await fetch('https://api.hackerearth.com/v4/partner/code-evaluation/submissions/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'client-secret': '19b9a4ac7f22af170ad74461e87feb999aace545'  // Ensure the secret is in the header as well
-            },
-            body: JSON.stringify(payload), // Send the payload as JSON
-        });
-
-        // Check if the response from the API is successful
-        if (!response.ok) {
-            const errorMessage = `HackerEarth API error: ${response.statusText}`;
-            console.error(errorMessage);
-            throw new Error(errorMessage);
+        // Compile with optimization and architecture-specific flags
+        const compileResult = await execPromise(`g++ "${sourceFile}" -o "${executable}" -O3 -Ofast -march=native -g0`);
+        if (compileResult.error) {
+            return res.json({ output: `Compilation Error:\n${compileResult.stderr}` });
         }
 
-        const data = await response.json();
-        res.json(data); // Send the output from the HackerEarth API back to the frontend
+        // Execute the compiled program
+        const runCommand = input ? `echo "${input}" | "${executable}" > "${outputFile}"` : `"${executable}" > "${outputFile}"`;
+        const runResult = await execPromise(runCommand);
+
+        const output = fs.readFileSync(outputFile, 'utf8');
+        res.json({ output: output || 'No output' });
     } catch (error) {
-        // Log error details and send a 500 response to the frontend
-        console.error('Backend Error:', error);
-        res.status(500).json({ error: 'Error executing C++ code. Try again later.' });
+        res.json({ output: `Error: ${error.stderr || error.message}` });
     }
 });
 
-// Use a dynamic port if available, otherwise default to 10000
-const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
