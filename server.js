@@ -26,11 +26,12 @@ app.post('/run', async (req, res) => {
     };
 
     try {
-        // Make a POST request to HackerEarth API
+        // Make a POST request to HackerEarth API to execute code
         const response = await fetch('https://api.hackerearth.com/v4/partner/code-evaluation/submissions/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'client-secret': '7b09b380c9e085844b56ef67e59a4ceb2f45e70e', // Client secret for auth
             },
             body: JSON.stringify(payload), // Send the payload as JSON
         });
@@ -43,7 +44,25 @@ app.post('/run', async (req, res) => {
         }
 
         const data = await response.json();
-        res.json(data); // Send the output from the HackerEarth API back to the frontend
+        const he_id = data.he_id; // Get the unique he_id for the request
+        
+        // Now fetch the status using the he_id
+        const statusResponse = await fetch(`https://api.hackerearth.com/v4/partner/code-evaluation/submissions/${he_id}/`, {
+            method: 'GET',
+            headers: {
+                'client-secret': '7b09b380c9e085844b56ef67e59a4ceb2f45e70e', // Client secret for auth
+            },
+        });
+
+        // Check if the status response is successful
+        if (!statusResponse.ok) {
+            const errorMessage = `HackerEarth status API error: ${statusResponse.statusText}`;
+            console.error(errorMessage);
+            throw new Error(errorMessage);
+        }
+
+        const statusData = await statusResponse.json();
+        res.json(statusData); // Send the status response back to the frontend
     } catch (error) {
         // Log error details and send a 500 response to the frontend
         console.error('Backend Error:', error);
