@@ -1,7 +1,7 @@
 {
-  "name": "blaze-cpp-compiler",
+  "name": "blaze-cpp17-compiler",
   "version": "1.0.0",
-  "description": "A Node.js server for compiling and executing C++ code using the HackerEarth API.",
+  "description": "A Node.js server for compiling and executing C++17 code using the HackerEarth API.",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
-    "C++",
+    "C++17",
     "compiler",
     "Node.js",
     "HackerEarth",
@@ -25,4 +25,3 @@
     "node-fetch": "^3.3.2"
   }
 }
-
