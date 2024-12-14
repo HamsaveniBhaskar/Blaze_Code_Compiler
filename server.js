@@ -1,7 +1,7 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import fetch from 'node-fetch'; // For making API requests
-import cors from 'cors'; // To handle cross-origin requests
+import fetch from 'node-fetch';
+import cors from 'cors';
 
 const app = express();
 
@@ -20,7 +20,7 @@ app.post('/run', async (req, res) => {
         client_secret: '19b9a4ac7f22af170ad74461e87feb999aace545', // HackerEarth Client Secret Key
         script: code, // The C++ code to execute
         stdin: input, // Input for the code
-        lang: 'CPP', // Specify C++ as the language (CPP is the correct identifier)
+        lang: 'CPP17', // Specify C++17 as the language (if CPP is causing issues)
         time_limit: 5, // Execution time limit in seconds
         memory_limit: 262144, // Memory limit in KB (256 MB)
     };
@@ -31,6 +31,7 @@ app.post('/run', async (req, res) => {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'client-secret': '19b9a4ac7f22af170ad74461e87feb999aace545'  // Ensure the secret is in the header as well
             },
             body: JSON.stringify(payload), // Send the payload as JSON
         });
