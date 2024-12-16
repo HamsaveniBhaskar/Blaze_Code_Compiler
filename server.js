@@ -1,5 +1,5 @@
 const express = require('express');
-const { exec } = require('child_process');
+const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
@@ -10,18 +10,6 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-const execPromise = (command) => {
-    return new Promise((resolve, reject) => {
-        exec(command, (error, stdout, stderr) => {
-            if (error) {
-                reject({ error, stderr });
-            } else {
-                resolve({ stdout, stderr });
-            }
-        });
-    });
-};
-
 app.post('/', async (req, res) => {
     const { code, input } = req.body;
 
@@ -30,26 +18,28 @@ app.post('/', async (req, res) => {
     }
 
     const sourceFile = path.join(__dirname, 'temp.cpp');
-    const executable = path.join(__dirname, 'temp.exe');
     const outputFile = path.join(__dirname, 'output.txt');
-
+    const executable = path.join(__dirname, 'temp.exe');
     fs.writeFileSync(sourceFile, code);
 
     try {
-        // Compile with optimization and architecture-specific flags
-        const compileResult = await execPromise(`g++ "${sourceFile}" -o "${executable}" -O3 -Ofast -march=native -g0`);
-        if (compileResult.error) {
-            return res.json({ output: `Compilation Error:\n${compileResult.stderr}` });
-        }
+        const compileProcess = spawn('clang++', [sourceFile, '-o', executable, '-O2']);
+        compileProcess.on('close', (code) => {
+            if (code !== 0) {
+                return res.json({ output: 'Compilation failed!' });
+            }
 
-        // Execute the compiled program
-        const runCommand = input ? `echo "${input}" | "${executable}" > "${outputFile}"` : `"${executable}" > "${outputFile}"`;
-        const runResult = await execPromise(runCommand);
+            const runProcess = spawn(executable, [], { stdio: 'pipe' });
+            let output = '';
+            runProcess.stdout.on('data', (data) => (output += data.toString()));
+            runProcess.stderr.on('data', (data) => (output += data.toString()));
 
-        const output = fs.readFileSync(outputFile, 'utf8');
-        res.json({ output: output || 'No output' });
+            runProcess.on('close', () => {
+                res.json({ output: output || 'No output' });
+            });
+        });
     } catch (error) {
-        res.json({ output: `Error: ${error.stderr || error.message}` });
+        res.json({ output: `Error: ${error.message}` });
     }
 });
 
