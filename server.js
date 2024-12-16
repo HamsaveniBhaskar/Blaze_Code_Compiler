@@ -18,28 +18,42 @@ app.post('/', async (req, res) => {
     }
 
     const sourceFile = path.join(__dirname, 'temp.cpp');
-    const outputFile = path.join(__dirname, 'output.txt');
     const executable = path.join(__dirname, 'temp.exe');
+
+    // Write the code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
     try {
-        const compileProcess = spawn('clang++', [sourceFile, '-o', executable, '-O2']);
+        // Compile the code using g++ (MinGW)
+        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-O2']);
+
         compileProcess.on('close', (code) => {
             if (code !== 0) {
                 return res.json({ output: 'Compilation failed!' });
             }
 
+            // Run the compiled executable
             const runProcess = spawn(executable, [], { stdio: 'pipe' });
+
             let output = '';
+
             runProcess.stdout.on('data', (data) => (output += data.toString()));
             runProcess.stderr.on('data', (data) => (output += data.toString()));
 
             runProcess.on('close', () => {
                 res.json({ output: output || 'No output' });
+
+                // Cleanup temporary files
+                fs.unlinkSync(sourceFile);
+                fs.unlinkSync(executable);
             });
         });
     } catch (error) {
         res.json({ output: `Error: ${error.message}` });
+
+        // Cleanup temporary files in case of an error
+        if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
+        if (fs.existsSync(executable)) fs.unlinkSync(executable);
     }
 });
 
