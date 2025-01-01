@@ -25,21 +25,20 @@ app.post('/', async (req, res) => {
 
     try {
         // Compile the code using g++
-        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-O2']);
+        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17']);
 
         compileProcess.on('close', (compileCode) => {
             if (compileCode !== 0) {
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Configure the spawn options
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
             let output = '';
 
-            // Write input if provided
+            // Write the input all at once and close the stdin
             if (input) {
-                runProcess.stdin.write(input + '\n');
+                runProcess.stdin.write(input);
                 runProcess.stdin.end();
             }
 
