@@ -66,7 +66,10 @@ app.post("/", (req, res) => {
 
             // Send the initial program output to the client
             setTimeout(() => {
-                res.json({ output: processOutput });
+                res.json({
+                    output: processOutput,
+                    prompt: extractPrompt(processOutput),
+                });
                 processOutput = ""; // Clear buffer after sending
             }, 200); // Wait briefly to capture initial output
         });
@@ -100,23 +103,20 @@ app.post("/input", (req, res) => {
 });
 
 /**
+ * Function to extract the prompt from the program output (e.g., "Enter a number:")
+ */
+function extractPrompt(output) {
+    const match = output.match(/Enter .+/);
+    return match ? match[0] : null;
+}
+
+/**
  * Cleanup temporary files
  */
 function cleanupFiles(sourceFile, executable) {
     if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
     if (fs.existsSync(executable)) fs.unlinkSync(executable);
 }
-
-/**
- * Terminate the running process (optional cleanup endpoint)
- */
-app.post("/cleanup", (req, res) => {
-    if (runProcess) {
-        runProcess.kill(); // Kill the running process
-        runProcess = null;
-    }
-    res.json({ output: "Process terminated." });
-});
 
 // Start the server
 app.listen(PORT, () => {
