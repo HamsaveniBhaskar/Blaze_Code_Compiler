@@ -3,7 +3,6 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
-const readline = require("readline");
 
 const app = express();
 const PORT = 3000;
@@ -15,7 +14,7 @@ let inputRequestId = 0;  // To track input for interactive programs
 
 // POST route to run the code
 app.post("/run", (req, res) => {
-  const { code, input, inputRequestId: reqInputRequestId } = req.body;
+  const { code, input } = req.body;
 
   if (!code) {
     return res.status(400).json({ output: "Error: No code provided!" });
@@ -43,7 +42,7 @@ app.post("/run", (req, res) => {
 
       // Execute the compiled program
       const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-      
+
       let processOutput = "";
 
       runProcess.stdout.on("data", (data) => {
@@ -54,25 +53,25 @@ app.post("/run", (req, res) => {
         processOutput += "Error: " + data.toString();
       });
 
-      // If the input is needed (cin), we'll capture the input and send it to the program
-      if (reqInputRequestId) {
-        inputRequestId++;
-        return res.json({
-          inputPrompt: "Enter input: ",  // Show the input prompt
-          inputRequestId: inputRequestId,
-        });
+      // Check if the program requires interactive input (i.e., `cin`)
+      if (code.includes("cin")) {
+        if (input) {
+          runProcess.stdin.write(input + "\n");  // Provide input if available
+        } else {
+          // Handle input automatically without waiting for prompts
+          runProcess.stdin.write("\n");  // Write a blank line if no input is provided
+        }
       }
 
-      // If input is provided, write it to stdin of the program
-      if (input) {
-        runProcess.stdin.write(input + "\n");
-      }
-
-      setTimeout(() => {
-        res.json({
-          output: processOutput || "No output received!",
-        });
-      }, 200);
+      // Wait for the program to finish execution and then send the output
+      runProcess.on("close", () => {
+        setTimeout(() => {
+          res.json({
+            output: processOutput || "No output received!",
+          });
+          cleanupFiles(sourceFile, executable);  // Clean up after execution
+        }, 200);
+      });
     });
   } catch (error) {
     console.error("Error occurred:", error);
