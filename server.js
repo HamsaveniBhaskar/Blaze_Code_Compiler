@@ -10,16 +10,17 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
+// Global variable to track the input request IDs
 let inputRequestId = 0;
 
-app.post("/run", (req, res) => {
+app.post("/", (req, res) => {
     const { code, input, inputRequestId: reqInputRequestId } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: "Error: No code provided!" });
     }
 
-    // Write the code to a temporary file
+    // Write the source code to a temporary file
     const sourceFile = path.join(__dirname, "temp.cpp");
     const executable = path.join(__dirname, "temp.exe");
 
@@ -51,20 +52,25 @@ app.post("/run", (req, res) => {
                 processOutput += "Error: " + data.toString();
             });
 
-            // If input is required, send the prompt and expect input
+            runProcess.on("close", () => {
+                cleanupFiles(sourceFile, executable);
+            });
+
+            // If an input is needed, send back the prompt and wait for user input
             if (reqInputRequestId) {
                 inputRequestId++;
                 return res.json({
-                    inputPrompt: "Enter a positive number: ",  // Ask for input
+                    inputPrompt: "Enter a Number: ",  // Prompt asking for input
                     inputRequestId: inputRequestId,
                 });
             }
 
-            // If input is provided, continue the program with the input
+            // Once input is provided, continue executing the program with that input
             if (input) {
                 runProcess.stdin.write(input + "\n");
             }
 
+            // Return the output of the program
             setTimeout(() => {
                 res.json({
                     output: processOutput || "No output received!",
@@ -72,7 +78,6 @@ app.post("/run", (req, res) => {
             }, 200);
         });
     } catch (error) {
-        console.error("Error occurred:", error);
         res.json({ output: `Server error: ${error.message}` });
         cleanupFiles(sourceFile, executable);
     }
