@@ -64,14 +64,28 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
             });
 
-            // Send the initial program output to the client
-            setTimeout(() => {
-                res.json({
-                    output: processOutput,
-                    prompt: extractPrompt(processOutput),
-                });
-                processOutput = ""; // Clear buffer after sending
-            }, 200); // Wait briefly to capture initial output
+            // Check if the code contains 'cin' to determine if we need user input
+            const requiresInput = code.includes("cin >>");
+
+            // If no input is needed, return output immediately
+            if (!requiresInput) {
+                setTimeout(() => {
+                    res.json({
+                        output: processOutput || "No output received!",
+                        prompt: null, // No prompt needed
+                    });
+                    processOutput = ""; // Clear buffer after sending
+                }, 200);
+            } else {
+                // If input is required, we will handle it in the /input route
+                setTimeout(() => {
+                    res.json({
+                        output: processOutput || "No output received!",
+                        prompt: null, // Do not show "Enter input"
+                    });
+                    processOutput = ""; // Clear buffer after sending
+                }, 200);
+            }
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
@@ -101,14 +115,6 @@ app.post("/input", (req, res) => {
         res.json({ output }); // Send the output to the client
     }, 200); // Small delay to wait for program response
 });
-
-/**
- * Function to extract the prompt from the program output (e.g., "Enter a number:")
- */
-function extractPrompt(output) {
-    const match = output.match(/Enter .+/);
-    return match ? match[0] : null;
-}
 
 /**
  * Cleanup temporary files
