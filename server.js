@@ -1,7 +1,7 @@
+const express = require('express');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const express = require('express');
 const cors = require('cors');
 
 const app = express();
@@ -20,9 +20,11 @@ app.post('/', async (req, res) => {
     const sourceFile = path.join(__dirname, 'temp.cpp');
     const executable = path.join(__dirname, 'temp.exe');
 
+    // Write the code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
     try {
+        // Compile the C++ code
         const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17', '-O2']);
 
         compileProcess.on('close', (compileCode) => {
@@ -30,45 +32,56 @@ app.post('/', async (req, res) => {
                 return res.json({ output: 'Compilation failed!' });
             }
 
+            // Execute the compiled program
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
             let output = '';
+            let error = '';
 
-            // Handle input
+            // Send input to the program's stdin
             if (input) {
                 runProcess.stdin.write(input + '\n');
-                runProcess.stdin.end();
             }
+            runProcess.stdin.end();
 
-            // Collect output and error
+            // Collect program output and error
             runProcess.stdout.on('data', (data) => {
                 output += data.toString();
             });
             runProcess.stderr.on('data', (data) => {
-                output += data.toString();
+                error += data.toString();
             });
 
-            // Add timeout for the process
+            // Add timeout to prevent hanging
             const timeout = setTimeout(() => {
-                runProcess.kill(); // Terminate the process if it runs for too long
+                runProcess.kill(); // Terminate the process if it takes too long
                 res.json({ output: 'Error: Execution timeout' });
+
+                // Clean up files
+                if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
+                if (fs.existsSync(executable)) fs.unlinkSync(executable);
             }, 5000); // 5 seconds timeout
 
             runProcess.on('close', () => {
-                clearTimeout(timeout); // Clear timeout once the process ends
-                res.json({ output: output.trim() || 'No output' });
+                clearTimeout(timeout);
 
-                fs.unlinkSync(sourceFile);
-                fs.unlinkSync(executable);
+                // If there's an error, return it; otherwise, return the output
+                res.json({ output: error || output.trim() || 'No output' });
+
+                // Clean up files
+                if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
+                if (fs.existsSync(executable)) fs.unlinkSync(executable);
             });
         });
     } catch (err) {
         res.json({ output: `Error: ${err.message}` });
 
-        // Cleanup files
+        // Clean up files
         if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
         if (fs.existsSync(executable)) fs.unlinkSync(executable);
     }
 });
 
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Server is running at http://localhost:${PORT}`);
+});
