@@ -27,25 +27,29 @@ app.post('/', async (req, res) => {
         // Compile the code using g++
         const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-O2']);
 
-        compileProcess.on('close', (code) => {
-            if (code !== 0) {
+        compileProcess.on('close', (compileCode) => {
+            if (compileCode !== 0) {
                 return res.json({ output: 'Compilation failed!' });
             }
 
             // Configure the spawn options
-            const spawnOptions = input ? { stdio: 'pipe' } : { stdio: 'inherit' };
-            const runProcess = spawn(executable, [], spawnOptions);
+            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
             let output = '';
 
-            // Handle input properly
+            // Write input if provided
             if (input) {
                 runProcess.stdin.write(input + '\n');
                 runProcess.stdin.end();
             }
 
-            runProcess.stdout.on('data', (data) => (output += data.toString()));
-            runProcess.stderr.on('data', (data) => (output += data.toString()));
+            // Capture output and errors
+            runProcess.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+            runProcess.stderr.on('data', (data) => {
+                output += data.toString();
+            });
 
             runProcess.on('close', () => {
                 res.json({ output: output.trim() || 'No output' });
