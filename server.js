@@ -10,72 +10,81 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Temporary files for code execution
-const sourceFile = path.join(__dirname, "temp.cpp");
-const executable = path.join(__dirname, "temp.exe");
+// Global variable to track the input request IDs
+let inputRequestId = 0;
 
 app.post("/", (req, res) => {
-    const { code, input } = req.body;
+    const { code, input, inputRequestId: reqInputRequestId } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: "Error: No code provided!" });
     }
 
-    // Write the C++ code to a temporary file
+    // Write the source code to a temporary file
+    const sourceFile = path.join(__dirname, "temp.cpp");
+    const executable = path.join(__dirname, "temp.exe");
+
     fs.writeFileSync(sourceFile, code);
 
     try {
-        // Step 1: Compile the C++ code
+        // Compile the code
         const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
 
         compileProcess.stderr.on("data", (data) => {
-            res.json({ output: `Compilation Error: ${data.toString()}` });
+            console.error("Compilation Error:", data.toString());
         });
 
         compileProcess.on("close", (compileCode) => {
             if (compileCode !== 0) {
-                cleanupFiles();
-                return;
+                cleanupFiles(sourceFile, executable);
+                return res.json({ output: "Compilation failed. Please check your code." });
             }
 
-            // Step 2: Run the compiled executable
-            const runProcess = spawn(executable);
-
-            // Handle the real-time interaction with `cin` (user input)
-            let outputData = "";
-
-            // Collect `stdout` data (program output)
+            // Execute the compiled program
+            const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
+            
+            let processOutput = "";
             runProcess.stdout.on("data", (data) => {
-                outputData += data.toString();
-                res.write(JSON.stringify({ output: outputData }));
+                processOutput += data.toString();
             });
 
-            // Collect `stderr` data (error messages)
             runProcess.stderr.on("data", (data) => {
-                outputData += `Error: ${data.toString()}`;
-                res.write(JSON.stringify({ output: outputData }));
+                processOutput += "Error: " + data.toString();
             });
 
-            // Pass the user-provided input to the program's `stdin`
+            runProcess.on("close", () => {
+                cleanupFiles(sourceFile, executable);
+            });
+
+            // If an input is needed, send back the prompt and wait for user input
+            if (reqInputRequestId !== undefined) {
+                inputRequestId++;
+                return res.json({
+                    inputPrompt: "Enter a Number: ",  // Prompt asking for input
+                    inputRequestId: inputRequestId,
+                });
+            }
+
+            // Once input is provided, continue executing the program with that input
             if (input) {
                 runProcess.stdin.write(input + "\n");
-                runProcess.stdin.end();
             }
 
-            // When the program finishes, send the final output
-            runProcess.on("close", () => {
-                cleanupFiles();
-                res.end();
-            });
+            // Return the output of the program
+            setTimeout(() => {
+                res.json({
+                    output: processOutput || "No output received!",
+                });
+            }, 200);
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
-        cleanupFiles();
+        cleanupFiles(sourceFile, executable);
     }
 });
 
 // Cleanup temporary files
-function cleanupFiles() {
+function cleanupFiles(sourceFile, executable) {
     if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
     if (fs.existsSync(executable)) fs.unlinkSync(executable);
 }
