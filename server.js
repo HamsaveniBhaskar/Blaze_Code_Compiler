@@ -10,9 +10,10 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-let runProcess = null;
+let runProcess = null; // Store the currently running process
+let processOutput = ""; // Buffer for program output
 
-// Handle code execution
+// Endpoint to compile and execute the code
 app.post("/", (req, res) => {
     const { code } = req.body;
 
@@ -27,7 +28,7 @@ app.post("/", (req, res) => {
     fs.writeFileSync(sourceFile, code);
 
     try {
-        // Compile the code
+        // Compile the C++ code
         const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
 
         compileProcess.on("close", (compileCode) => {
@@ -35,61 +36,55 @@ app.post("/", (req, res) => {
                 return res.json({ output: "Compilation failed!" });
             }
 
-            // Run the compiled executable
+            // Run the compiled program
             runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
+            processOutput = ""; // Clear the output buffer
 
-            let output = "";
-
+            // Collect output from the running process
             runProcess.stdout.on("data", (data) => {
-                output += data.toString();
+                processOutput += data.toString();
             });
 
             runProcess.stderr.on("data", (data) => {
-                output += data.toString();
+                processOutput += data.toString();
             });
 
-            runProcess.on("close", () => {
-                res.json({ output });
-                cleanup(sourceFile, executable);
-            });
+            res.json({ output: "Program started...\n" + processOutput });
         });
     } catch (error) {
         res.json({ output: `Error: ${error.message}` });
-        cleanup(sourceFile, executable);
     }
 });
 
-// Handle user input during program execution
+// Endpoint to handle user input for the running program
 app.post("/input", (req, res) => {
     const { input } = req.body;
 
-    if (runProcess) {
-        runProcess.stdin.write(input + "\n"); // Send input to the running process
-
-        let output = "";
-
-        runProcess.stdout.on("data", (data) => {
-            output += data.toString();
-        });
-
-        runProcess.stderr.on("data", (data) => {
-            output += data.toString();
-        });
-
-        runProcess.on("close", () => {
-            res.json({ output });
-        });
-    } else {
-        res.status(400).json({ output: "Error: No running process found!" });
+    if (!runProcess) {
+        return res.status(400).json({ output: "Error: No running process found!" });
     }
+
+    // Write the input to the running process
+    runProcess.stdin.write(input + "\n");
+
+    // Wait a small amount of time to collect the process's output
+    setTimeout(() => {
+        const output = processOutput; // Copy the output buffer
+        processOutput = ""; // Clear the buffer
+        res.json({ output }); // Send the output back to the client
+    }, 200); // Small delay to wait for program output
 });
 
-// Cleanup temporary files
-function cleanup(sourceFile, executable) {
-    if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
-    if (fs.existsSync(executable)) fs.unlinkSync(executable);
-}
+// Cleanup process on server shutdown
+app.post("/cleanup", (req, res) => {
+    if (runProcess) {
+        runProcess.kill(); // Kill the running process
+        runProcess = null;
+    }
+    res.json({ output: "Process terminated." });
+});
 
+// Start the server
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    console.log(`Server is running at http://localhost:${PORT}`);
 });
