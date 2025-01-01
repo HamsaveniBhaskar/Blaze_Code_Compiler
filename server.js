@@ -12,7 +12,7 @@ app.use(express.json());
 
 let inputRequestId = 0;
 
-app.post("/", (req, res) => {
+app.post("/run", (req, res) => {
     const { code, input, inputRequestId: reqInputRequestId } = req.body;
 
     if (!code) {
@@ -49,10 +49,6 @@ app.post("/", (req, res) => {
 
             runProcess.stderr.on("data", (data) => {
                 processOutput += "Error: " + data.toString();
-            });
-
-            runProcess.on("close", () => {
-                cleanupFiles(sourceFile, executable);
             });
 
             // If input is required, send the prompt and expect input
