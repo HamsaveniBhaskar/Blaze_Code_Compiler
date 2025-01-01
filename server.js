@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/', async (req, res) => {
-    const { code } = req.body;
+    const { code, input } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: 'Error: No code provided!' });
@@ -32,17 +32,23 @@ app.post('/', async (req, res) => {
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Execute the compiled program
+            // Run the compiled executable
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+            // Send user input to stdin of the C++ program
+            if (input) {
+                runProcess.stdin.write(input + '\n');
+            }
 
             let output = '';
             let error = '';
 
-            // Allow interaction with the program (e.g., input from the user)
+            // Handle program output
             runProcess.stdout.on('data', (data) => {
                 output += data.toString();
             });
 
+            // Handle program errors
             runProcess.stderr.on('data', (data) => {
                 error += data.toString();
             });
