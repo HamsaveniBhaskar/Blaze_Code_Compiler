@@ -7,54 +7,37 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());  // Allow cross-origin requests from any domain
-app.use(express.json());  // Parse JSON requests
+app.use(cors());  // Enable CORS
+app.use(express.json());  // Parse JSON request body
 
-// Store active processes for each running code
 const activeProcesses = {};
 
-// Route to compile and run the C++ code
 app.post("/run", (req, res) => {
     const { code } = req.body;
-
-    if (!code) {
-        return res.status(400).json({ output: "Error: No code provided!" });
-    }
+    if (!code) return res.status(400).json({ output: "Error: No code provided!" });
 
     const sourceFile = path.join(__dirname, "temp.cpp");
     const executable = path.join(__dirname, "temp.exe");
 
-    // Write the code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
     try {
-        // Compile the code using g++
         const compileProcess = spawn("g++", [sourceFile, "-o", executable, "-O2"]);
 
         compileProcess.on("close", (compileCode) => {
-            if (compileCode !== 0) {
-                cleanupFiles(sourceFile, executable);
-                return res.json({ output: "Compilation failed!" });
-            }
+            if (compileCode !== 0) return res.json({ output: "Compilation failed!" });
 
-            // Run the compiled executable
             const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            const processId = Date.now().toString(); // Unique ID for this process
+            const processId = Date.now().toString(); // Unique process ID for tracking
             activeProcesses[processId] = runProcess;
 
             let outputBuffer = "";
 
             runProcess.stdout.on("data", (data) => {
                 outputBuffer += data.toString();
-
-                // Check if the program is waiting for input
                 if (outputBuffer.includes("Enter")) {
-                    res.json({
-                        output: outputBuffer.trim(),
-                        processId,
-                        waitingForInput: true
-                    });
-                    outputBuffer = ""; // Clear the output buffer for next prompt
+                    res.json({ output: outputBuffer, waitingForInput: true, processId });
+                    outputBuffer = "";
                 }
             });
 
@@ -73,54 +56,35 @@ app.post("/run", (req, res) => {
     }
 });
 
-// Route to handle user input for running processes
 app.post("/enter", (req, res) => {
     const { processId, input } = req.body;
-
-    if (!processId || !activeProcesses[processId]) {
-        return res.status(400).json({ output: "Error: Invalid process ID!" });
-    }
+    if (!processId || !activeProcesses[processId]) return res.status(400).json({ output: "Error: Invalid process ID!" });
 
     const runProcess = activeProcesses[processId];
-
-    // Write the input to the process's stdin
     runProcess.stdin.write(input + "\n");
 
     let outputBuffer = "";
 
     runProcess.stdout.once("data", (data) => {
         outputBuffer += data.toString();
-
-        // Check if the process is still waiting for input or finished
         if (outputBuffer.includes("Enter")) {
-            res.json({
-                output: outputBuffer.trim(),
-                waitingForInput: true
-            });
+            res.json({ output: outputBuffer, waitingForInput: true });
         } else {
-            res.json({
-                output: outputBuffer.trim(),
-                waitingForInput: false
-            });
+            res.json({ output: outputBuffer, waitingForInput: false });
         }
     });
 
     runProcess.stderr.once("data", (data) => {
         outputBuffer += data.toString();
-        res.json({
-            output: outputBuffer.trim(),
-            waitingForInput: false
-        });
+        res.json({ output: outputBuffer, waitingForInput: false });
     });
 });
 
-// Helper function to clean up temporary files
 function cleanupFiles(sourceFile, executable) {
     if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
     if (fs.existsSync(executable)) fs.unlinkSync(executable);
 }
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
