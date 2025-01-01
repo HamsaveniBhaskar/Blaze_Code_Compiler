@@ -33,12 +33,12 @@ app.post('/', async (req, res) => {
             }
 
             // Configure the spawn options
-            const spawnOptions = input ? { stdio: 'pipe' } : { stdio: ['ignore', 'pipe', 'pipe'] };
+            const spawnOptions = input ? { stdio: 'pipe' } : { stdio: 'inherit' };
             const runProcess = spawn(executable, [], spawnOptions);
 
             let output = '';
 
-            // Only write input if provided
+            // Handle input properly
             if (input) {
                 runProcess.stdin.write(input + '\n');
                 runProcess.stdin.end();
