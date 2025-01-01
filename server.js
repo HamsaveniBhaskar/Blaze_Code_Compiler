@@ -24,7 +24,7 @@ app.post('/', async (req, res) => {
     fs.writeFileSync(sourceFile, code);
 
     try {
-        // Compile the code using g++ (MinGW)
+        // Compile the code using g++
         const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-O2']);
 
         compileProcess.on('close', (code) => {
@@ -32,16 +32,17 @@ app.post('/', async (req, res) => {
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Run the compiled executable
-            const runProcess = spawn(executable, [], { stdio: 'pipe' });
+            // Configure the spawn options
+            const spawnOptions = input ? { stdio: 'pipe' } : { stdio: ['ignore', 'pipe', 'pipe'] };
+            const runProcess = spawn(executable, [], spawnOptions);
 
             let output = '';
 
-            // Write the input to the stdin of the process
+            // Only write input if provided
             if (input) {
                 runProcess.stdin.write(input + '\n');
+                runProcess.stdin.end();
             }
-            runProcess.stdin.end();
 
             runProcess.stdout.on('data', (data) => (output += data.toString()));
             runProcess.stderr.on('data', (data) => (output += data.toString()));
