@@ -1,69 +1,26 @@
-const express = require('express');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const cors = require('cors');
-
-const app = express();
-const PORT = 3000;
-
-app.use(cors());
-app.use(express.json());
-
-app.post('/', async (req, res) => {
-    const { code, input } = req.body;
-
-    if (!code) {
-        return res.status(400).json({ output: 'Error: No code provided!' });
-    }
-
-    const sourceFile = path.join(__dirname, 'temp.cpp');
-    const executable = path.join(__dirname, 'temp.exe');
-
-    // Write the code to a temporary file
-    fs.writeFileSync(sourceFile, code);
-
-    try {
-        // Compile the code using g++
-        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17', '-O2']);
-
-        compileProcess.on('close', (compileCode) => {
-            if (compileCode !== 0) {
-                return res.json({ output: 'Compilation failed!' });
-            }
-
-            // Spawn the executable
-            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
-
-            let output = '';
-            let errorOutput = '';
-
-            // Send input to the program if provided
-            if (input) {
-                runProcess.stdin.write(input + '\n');
-            }
-            runProcess.stdin.end();
-
-            // Capture stdout and stderr
-            runProcess.stdout.on('data', (data) => {
-                output += data.toString();
-            });
-
-            runProcess.stderr.on('data', (data) => {
-                errorOutput += data.toString();
-            });
-
-            // Handle process close
             runProcess.on('close', (runCode) => {
+                // Finalize the response when the program finishes execution
                 if (runCode === 0) {
-                    res.json({ output: output.trim() || 'No output' });
+                    output += "\n=== Code Execution Successful ===";
+                    res.end(`${output}`);
                 } else {
-                    res.json({ output: errorOutput.trim() || 'Program execution failed!' });
+                    res.end("Error: Program execution failed!");
                 }
 
                 // Cleanup temporary files
                 if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
                 if (fs.existsSync(executable)) fs.unlinkSync(executable);
+            });
+
+            // Handle user inputs
+            req.on('data', (data) => {
+                // Send user input to the program's stdin
+                runProcess.stdin.write(data.toString() + '\n');
+            });
+
+            req.on('end', () => {
+                // End the stdin stream when input is finished
+                runProcess.stdin.end();
             });
         });
     } catch (error) {
