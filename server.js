@@ -10,11 +10,11 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Global variable to track the input request IDs
-let inputRequestId = 0;
+// Global variable to track active requests
+let activeRequests = {};
 
 app.post("/", (req, res) => {
-    const { code, input, inputRequestId: reqInputRequestId } = req.body;
+    const { code, input, inputRequestId } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: "Error: No code provided!" });
@@ -54,11 +54,13 @@ app.post("/", (req, res) => {
 
             runProcess.on("close", () => {
                 cleanupFiles(sourceFile, executable);
+                // Remove from active requests once done
+                delete activeRequests[inputRequestId];
             });
 
-            // If an input is needed, send back the prompt and wait for user input
-            if (reqInputRequestId) {
-                inputRequestId++;
+            // If an input is needed, store the request and prompt for input
+            if (inputRequestId) {
+                activeRequests[inputRequestId] = runProcess;
                 return res.json({
                     inputPrompt: "Enter a Number: ",  // Prompt asking for input
                     inputRequestId: inputRequestId,
@@ -68,9 +70,10 @@ app.post("/", (req, res) => {
             // Once input is provided, continue executing the program with that input
             if (input) {
                 runProcess.stdin.write(input + "\n");
+                runProcess.stdin.end(); // Close stdin after writing input
             }
 
-            // Return the output of the program
+            // Return the output of the program after a short delay
             setTimeout(() => {
                 res.json({
                     output: processOutput || "No output received!",
