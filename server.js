@@ -1,8 +1,8 @@
 const express = require("express");
+const cors = require("cors");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const cors = require("cors");
 
 const app = express();
 const PORT = 3000;
@@ -10,89 +10,83 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-let runProcess = null;
-let processOutput = "";
-let waitingForInput = false;
+let runProcess = null; // Store the running process
+let isWaitingForInput = false; // Flag to check if process is waiting for input
+let processOutput = ""; // Store accumulated process output
 
-// Handle the source code compilation and execution
-app.post("/", (req, res) => {
+// POST endpoint to compile and run code
+app.post("/run", (req, res) => {
     const { code } = req.body;
 
     if (!code) {
-        return res.status(400).json({ output: "Error: No code provided!" });
+        return res.status(400).json({ error: "No code provided!" });
     }
 
-    const sourceFile = path.join(__dirname, "temp.cpp");
-    const executable = path.join(__dirname, "temp.exe");
+    const sourceFile = path.join(__dirname, "program.cpp");
+    const executableFile = path.join(__dirname, "program.exe");
 
+    // Write the code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
-    try {
-        const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
+    // Compile the C++ code
+    const compileProcess = spawn("g++", [sourceFile, "-o", executableFile]);
 
-        compileProcess.stderr.on("data", (data) => {
-            console.error("Compilation Error:", data.toString());
-        });
+    compileProcess.stderr.on("data", (data) => {
+        console.error("Compilation error:", data.toString());
+    });
 
-        compileProcess.on("close", (compileCode) => {
-            if (compileCode !== 0) {
-                cleanupFiles(sourceFile, executable);
-                return res.json({ output: "Compilation failed. Please check your code." });
-            }
+    compileProcess.on("close", (compileCode) => {
+        if (compileCode !== 0) {
+            cleanupFiles(sourceFile, executableFile);
+            return res.json({ output: "Compilation failed. Check your code for errors." });
+        }
 
-            runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            processOutput = "";
-            waitingForInput = false;
+        // Run the compiled executable
+        runProcess = spawn(executableFile, [], { stdio: ["pipe", "pipe", "pipe"] });
+        isWaitingForInput = false;
+        processOutput = "";
 
-            runProcess.stdout.on("data", (data) => {
-                processOutput += data.toString();
-                if (waitingForInput) {
-                    return res.json({ output: processOutput });
-                }
-            });
-
-            runProcess.stderr.on("data", (data) => {
-                processOutput += "Error: " + data.toString();
-            });
-
-            runProcess.on("close", () => {
-                cleanupFiles(sourceFile, executable);
-                waitingForInput = false;
-            });
-
-            // Send initial response
+        runProcess.stdout.on("data", (data) => {
+            processOutput += data.toString();
+            if (isWaitingForInput) return;
             res.json({ output: processOutput });
         });
-    } catch (error) {
-        res.json({ output: `Server error: ${error.message}` });
-        cleanupFiles(sourceFile, executable);
-    }
+
+        runProcess.stderr.on("data", (data) => {
+            processOutput += "Error: " + data.toString();
+        });
+
+        runProcess.on("close", () => {
+            cleanupFiles(sourceFile, executableFile);
+            runProcess = null;
+        });
+    });
 });
 
-// Handle user input during execution
+// POST endpoint to handle user input
 app.post("/input", (req, res) => {
     const { input } = req.body;
 
-    if (!runProcess) {
-        return res.status(400).json({ output: "Error: No running process found!" });
+    if (!runProcess || !isWaitingForInput) {
+        return res.status(400).json({ error: "No process is waiting for input." });
     }
 
-    // Send input to the running process
+    // Send the user input to the process
     runProcess.stdin.write(input + "\n");
-    waitingForInput = false;
+    isWaitingForInput = false;
 
+    // Send updated output back to the client
     setTimeout(() => {
         res.json({ output: processOutput });
-        processOutput = ""; // Clear process output for the next interaction
-    }, 200); 
+    }, 100);
 });
 
 // Cleanup temporary files
-function cleanupFiles(sourceFile, executable) {
+function cleanupFiles(sourceFile, executableFile) {
     if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
-    if (fs.existsSync(executable)) fs.unlinkSync(executable);
+    if (fs.existsSync(executableFile)) fs.unlinkSync(executableFile);
 }
 
 app.listen(PORT, () => {
-    console.log(`Server is running at http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
 });
