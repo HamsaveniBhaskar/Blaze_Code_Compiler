@@ -1,111 +1,37 @@
-const express = require("express");
-const { spawn } = require("child_process");
-const fs = require("fs");
-const path = require("path");
-const cors = require("cors");
+let processId = null; // Store the process ID when first response is received
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+// Event listener for when the "Run" button is clicked
+document.getElementById('runButton').addEventListener('click', async () => {
+    const code = editor.getValue();  // Assume `editor` is your code editor
 
-app.use(cors());
-app.use(express.json());
+    // Send code to the server for compilation and running
+    const response = await fetch('https://your-server-url/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+    });
 
-let activeProcesses = {};
-
-app.post("/run", (req, res) => {
-    const { code } = req.body;
-    if (!code) return res.status(400).json({ output: "Error: No code provided!" });
-
-    const sourceFile = path.join(__dirname, "temp.cpp");
-    const executable = path.join(__dirname, "temp.exe");
-
-    fs.writeFileSync(sourceFile, code);
-
-    try {
-        const compileProcess = spawn("g++", [sourceFile, "-o", executable, "-O2"]);
-
-        compileProcess.on("close", (compileCode) => {
-            if (compileCode !== 0) return res.json({ output: "Compilation failed!" });
-
-            const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            const processId = Date.now().toString(); // Unique process ID
-            activeProcesses[processId] = runProcess;
-
-            let outputBuffer = "";
-
-            runProcess.stdout.on("data", (data) => {
-                outputBuffer += data.toString();
-
-                // Only send a response when we encounter a prompt for input
-                if (outputBuffer.includes("Enter")) {
-                    // Send the response only when required, with the prompt and process ID
-                    if (!res.headersSent) {
-                        res.json({
-                            output: outputBuffer,
-                            waitingForInput: true,
-                            processId
-                        });
-                    }
-                    outputBuffer = ""; // Reset the buffer after sending the response
-                }
-            });
-
-            runProcess.stderr.on("data", (data) => {
-                outputBuffer += data.toString();
-            });
-
-            runProcess.on("close", () => {
-                delete activeProcesses[processId];
-                cleanupFiles(sourceFile, executable);
-            });
-        });
-    } catch (err) {
-        // Only send one response if error occurs
-        if (!res.headersSent) {
-            res.json({ output: `Error: ${err.message}` });
-        }
-        cleanupFiles(sourceFile, executable);
+    const result = await response.json();
+    if (result.waitingForInput) {
+        processId = result.processId;
+        outputEditor.setValue(result.output);
     }
 });
 
-app.post("/enter", (req, res) => {
-    const { processId, input } = req.body;
-    if (!processId || !activeProcesses[processId]) {
-        return res.status(400).json({ output: "Error: Invalid process ID!" });
-    }
+// Event listener for when the user provides input
+document.getElementById('submitButton').addEventListener('click', async () => {
+    const input = outputEditor.getValue();  // Get the input from the output editor
 
-    const runProcess = activeProcesses[processId];
-    runProcess.stdin.write(input + "\n");
-
-    let outputBuffer = "";
-
-    runProcess.stdout.once("data", (data) => {
-        outputBuffer += data.toString();
-        if (outputBuffer.includes("Enter")) {
-            // Ensure to send the response once.
-            if (!res.headersSent) {
-                res.json({ output: outputBuffer, waitingForInput: true });
-            }
-        } else {
-            if (!res.headersSent) {
-                res.json({ output: outputBuffer, waitingForInput: false });
-            }
-        }
+    // Send the input and processId to the backend
+    const response = await fetch('https://your-server-url/enter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            processId: processId,  // Use the correct process ID
+            input: input
+        })
     });
 
-    runProcess.stderr.once("data", (data) => {
-        outputBuffer += data.toString();
-        if (!res.headersSent) {
-            res.json({ output: outputBuffer, waitingForInput: false });
-        }
-    });
-});
-
-function cleanupFiles(sourceFile, executable) {
-    if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
-    if (fs.existsSync(executable)) fs.unlinkSync(executable);
-}
-
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+    const result = await response.json();
+    outputEditor.setValue(result.output);  // Update the output editor
 });
