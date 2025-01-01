@@ -32,42 +32,44 @@ app.post('/', (req, res) => {
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Run the compiled executable
-            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+            try {
+                // Run the compiled executable
+                const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-            let output = '';
-            let prompt = ''; // To store the prompt for user input
+                let output = '';
+                let prompt = 'Enter a number: '; // Static prompt for now; we can dynamically change it based on the code
 
-            // The inputIndex will be tracked by checking the input data
-            if (input.trim() === "" || input === undefined) {
-                prompt = "Enter a Number:";  // First prompt to get input
-                return res.json({ prompt: prompt }); // Wait for user input
+                // Listen for the program's output
+                runProcess.stdout.on('data', (data) => {
+                    output += data.toString();
+
+                    // If the program is prompting for input, wait for user input
+                    if (output.includes("Enter a number:")) {
+                        // We simulate that user input will be sent back to the program
+                        runProcess.stdin.write(input + '\n');
+                    }
+                });
+
+                runProcess.stderr.on('data', (data) => {
+                    output += data.toString();
+                });
+
+                runProcess.on('close', () => {
+                    // After the program finishes, return the output to the client
+                    res.json({ output: output.trim() || 'No output' });
+
+                    // Clean up temporary files after execution
+                    fs.unlinkSync(sourceFile);
+                    fs.unlinkSync(executable);
+                });
+            } catch (err) {
+                console.error("Error running the process:", err);
+                res.json({ output: `Error: ${err.message}` });
+
+                // Clean up temporary files if the run process fails
+                if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
+                if (fs.existsSync(executable)) fs.unlinkSync(executable);
             }
-
-            // Send user input to the program as cin
-            runProcess.stdin.write(input + '\n');
-
-            runProcess.stdout.on('data', (data) => {
-                output += data.toString();
-            });
-
-            runProcess.stderr.on('data', (data) => {
-                output += data.toString();
-            });
-
-            runProcess.on('close', () => {
-                if (output.indexOf("Enter a Number:") !== -1) {
-                    // If the program is expecting more input, return the prompt again
-                    return res.json({ prompt: prompt });
-                } else {
-                    // Show final output after the code execution completes
-                    res.json({ output: output || 'No output' });
-                }
-
-                // Clean up temporary files after execution
-                fs.unlinkSync(sourceFile);
-                fs.unlinkSync(executable);
-            });
         });
     } catch (error) {
         res.json({ output: `Error: ${error.message}` });
