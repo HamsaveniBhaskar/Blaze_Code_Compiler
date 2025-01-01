@@ -10,11 +10,11 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Store the running process and its output
 let runProcess = null;
 let processOutput = "";
+let waitingForInput = false;
 
-// Handle the incoming source code and compile it
+// Handle the source code compilation and execution
 app.post("/", (req, res) => {
     const { code } = req.body;
 
@@ -42,9 +42,13 @@ app.post("/", (req, res) => {
 
             runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
             processOutput = "";
+            waitingForInput = false;
 
             runProcess.stdout.on("data", (data) => {
                 processOutput += data.toString();
+                if (waitingForInput) {
+                    return res.json({ output: processOutput });
+                }
             });
 
             runProcess.stderr.on("data", (data) => {
@@ -53,10 +57,11 @@ app.post("/", (req, res) => {
 
             runProcess.on("close", () => {
                 cleanupFiles(sourceFile, executable);
+                waitingForInput = false;
             });
 
-            // Don't send output yet, wait for user input
-            res.json({ output: "" });
+            // Send initial response
+            res.json({ output: processOutput });
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
@@ -64,7 +69,7 @@ app.post("/", (req, res) => {
     }
 });
 
-// Handle the input provided by the user during execution
+// Handle user input during execution
 app.post("/input", (req, res) => {
     const { input } = req.body;
 
@@ -72,13 +77,13 @@ app.post("/input", (req, res) => {
         return res.status(400).json({ output: "Error: No running process found!" });
     }
 
-    // Send the user input to the running process
+    // Send input to the running process
     runProcess.stdin.write(input + "\n");
+    waitingForInput = false;
 
     setTimeout(() => {
-        const output = processOutput;
-        processOutput = "";
-        res.json({ output });
+        res.json({ output: processOutput });
+        processOutput = ""; // Clear process output for the next interaction
     }, 200); 
 });
 
