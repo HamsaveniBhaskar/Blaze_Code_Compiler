@@ -1,118 +1,85 @@
-const express = require("express");
-const { spawn } = require("child_process");
-const fs = require("fs");
-const path = require("path");
-const cors = require("cors");
-
+const express = require('express');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 
-app.use(cors());
 app.use(express.json());
 
-// Store active processes by processId
+// Store active processes to handle inputs interactively
 let activeProcesses = {};
 
-// Route for compiling and running the C++ code
-app.post("/run", (req, res) => {
+app.post('/run', (req, res) => {
     const { code } = req.body;
-    if (!code) return res.status(400).json({ output: "Error: No code provided!" });
+    const sourceFile = path.join(__dirname, 'temp.cpp');
+    const executable = path.join(__dirname, 'temp.exe');
 
-    const sourceFile = path.join(__dirname, "temp.cpp");
-    const executable = path.join(__dirname, "temp.exe");
-
-    // Write the code to a temporary file
+    // Save the code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
-    try {
-        // Compile the code using g++
-        const compileProcess = spawn("g++", [sourceFile, "-o", executable, "-O2"]);
-
-        compileProcess.on("close", (compileCode) => {
-            if (compileCode !== 0) return res.json({ output: "Compilation failed!" });
-
-            // Run the compiled executable
-            const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            const processId = Date.now().toString(); // Unique process ID
-            activeProcesses[processId] = runProcess;
-
-            let outputBuffer = "";
-
-            // Listen to output from the C++ program
-            runProcess.stdout.on("data", (data) => {
-                outputBuffer += data.toString();
-
-                // Send the output once the first prompt (for input) is found
-                if (outputBuffer.includes("Enter")) {
-                    res.json({
-                        output: outputBuffer,
-                        waitingForInput: true,
-                        processId
-                    });
-                    outputBuffer = ""; // Reset buffer after sending response
-                }
-            });
-
-            runProcess.stderr.on("data", (data) => {
-                outputBuffer += data.toString();
-            });
-
-            runProcess.on("close", () => {
-                delete activeProcesses[processId];
-                cleanupFiles(sourceFile, executable);
-            });
-        });
-    } catch (err) {
-        // Only send one response if error occurs
-        if (!res.headersSent) {
-            res.json({ output: `Error: ${err.message}` });
+    // Compile the code
+    const compileProcess = spawn('g++', [sourceFile, '-o', executable]);
+    
+    compileProcess.on('close', (code) => {
+        if (code !== 0) {
+            return res.json({ output: 'Compilation failed!' });
         }
-        cleanupFiles(sourceFile, executable);
-    }
+
+        // Run the compiled executable
+        const runProcess = spawn(executable, [], { stdio: 'pipe' });
+
+        const processId = Date.now();  // Unique process ID based on timestamp
+        activeProcesses[processId] = runProcess;  // Store the process by its ID
+
+        let output = '';
+
+        runProcess.stdout.on('data', (data) => {
+            output += data.toString();
+        });
+
+        runProcess.stderr.on('data', (data) => {
+            output += data.toString();
+        });
+
+        runProcess.on('close', () => {
+            res.json({ output: output || 'No output' });
+            delete activeProcesses[processId]; // Clean up after execution
+        });
+
+        res.json({
+            waitingForInput: true,
+            output: output + "\nEnter First Number: ",  // Output prompt for first input
+            processId
+        });
+    });
 });
 
-// Route for handling user input after running the program
-app.post("/enter", (req, res) => {
+app.post('/enter', (req, res) => {
     const { processId, input } = req.body;
 
-    // Ensure the process ID is valid
-    if (!processId || !activeProcesses[processId]) {
-        return res.status(400).json({ output: "Error: Invalid process ID!" });
+    if (!activeProcesses[processId]) {
+        return res.json({ output: 'Invalid process ID!' });
     }
 
-    const runProcess = activeProcesses[processId];
-    runProcess.stdin.write(input + "\n");
+    const process = activeProcesses[processId];
 
-    let outputBuffer = "";
+    // Send the input to the running process (simulate user input)
+    process.stdin.write(input + '\n');  // Send input to the process
 
-    runProcess.stdout.once("data", (data) => {
-        outputBuffer += data.toString();
-        if (outputBuffer.includes("Enter")) {
-            // Send the output with another prompt if required
-            if (!res.headersSent) {
-                res.json({ output: outputBuffer, waitingForInput: true });
-            }
-        } else {
-            // Send final output once the program completes
-            if (!res.headersSent) {
-                res.json({ output: outputBuffer, waitingForInput: false });
-            }
-        }
+    let output = '';
+    process.stdout.on('data', (data) => {
+        output += data.toString();
     });
 
-    runProcess.stderr.once("data", (data) => {
-        outputBuffer += data.toString();
-        if (!res.headersSent) {
-            res.json({ output: outputBuffer, waitingForInput: false });
-        }
+    process.stderr.on('data', (data) => {
+        output += data.toString();
+    });
+
+    process.on('close', () => {
+        res.json({ output: output || 'No output' });
     });
 });
-
-// Cleanup temporary files
-function cleanupFiles(sourceFile, executable) {
-    if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
-    if (fs.existsSync(executable)) fs.unlinkSync(executable);
-}
 
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
