@@ -18,7 +18,7 @@ let processOutput = ""; // Buffer for the output
  * Compile and execute the C++ code
  */
 app.post("/", (req, res) => {
-    const { code } = req.body;
+    const { code, input } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: "Error: No code provided!" });
@@ -64,56 +64,22 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
             });
 
-            // Check if the code contains 'cin' to determine if we need user input
-            const requiresInput = code.includes("cin >>");
-
-            // If no input is needed, return output immediately
-            if (!requiresInput) {
-                setTimeout(() => {
-                    res.json({
-                        output: processOutput || "No output received!",
-                        prompt: null, // No prompt needed
-                    });
-                    processOutput = ""; // Clear buffer after sending
-                }, 200);
-            } else {
-                // If input is required, we will handle it in the /input route
-                setTimeout(() => {
-                    res.json({
-                        output: processOutput || "No output received!",
-                        prompt: null, // Do not show "Enter input"
-                    });
-                    processOutput = ""; // Clear buffer after sending
-                }, 200);
+            // If input is provided, send it to the process
+            if (input) {
+                runProcess.stdin.write(input.trim() + "\n"); // Send input from output editor
             }
+
+            setTimeout(() => {
+                res.json({
+                    output: processOutput || "No output received!",
+                });
+                processOutput = ""; // Clear buffer after sending output
+            }, 200);
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
         cleanupFiles(sourceFile, executable);
     }
-});
-
-/**
- * Handle user input and send it to the running program
- */
-app.post("/input", (req, res) => {
-    const { input } = req.body;
-
-    if (!runProcess) {
-        return res.status(400).json({ output: "Error: No running process found!" });
-    }
-
-    console.log("User Input Received:", input);
-
-    // Write the input to the running process
-    runProcess.stdin.write(input.trim() + "\n");
-
-    // Capture output after input
-    setTimeout(() => {
-        const output = processOutput; // Copy the output buffer
-        processOutput = ""; // Clear the buffer
-        res.json({ output }); // Send the output to the client
-    }, 200); // Small delay to wait for program response
 });
 
 /**
