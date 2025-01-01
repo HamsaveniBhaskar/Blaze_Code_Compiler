@@ -10,24 +10,24 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Global variable to track the input request IDs
-let inputRequestId = 0;
+// Store the running process and its output
+let runProcess = null;
+let processOutput = "";
 
+// Handle the incoming source code and compile it
 app.post("/", (req, res) => {
-    const { code, input, inputRequestId: reqInputRequestId } = req.body;
+    const { code } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: "Error: No code provided!" });
     }
 
-    // Write the source code to a temporary file
     const sourceFile = path.join(__dirname, "temp.cpp");
     const executable = path.join(__dirname, "temp.exe");
 
     fs.writeFileSync(sourceFile, code);
 
     try {
-        // Compile the code
         const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
 
         compileProcess.stderr.on("data", (data) => {
@@ -37,13 +37,12 @@ app.post("/", (req, res) => {
         compileProcess.on("close", (compileCode) => {
             if (compileCode !== 0) {
                 cleanupFiles(sourceFile, executable);
-                return res.json({ output: "" });  // Return empty output
+                return res.json({ output: "Compilation failed. Please check your code." });
             }
 
-            // Execute the compiled program
-            const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            
-            let processOutput = "";
+            runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
+            processOutput = "";
+
             runProcess.stdout.on("data", (data) => {
                 processOutput += data.toString();
             });
@@ -56,21 +55,33 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
             });
 
-            // Check if the code only has input logic and no output
-            if (!processOutput) {
-                // If there's no output, send empty response to frontend
-                return res.json({ output: "" });
-            }
-
-            // If output exists, send it back
-            res.json({
-                output: processOutput,
-            });
+            setTimeout(() => {
+                res.json({ output: processOutput });
+                processOutput = ""; // Reset buffer after response
+            }, 200); 
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
         cleanupFiles(sourceFile, executable);
     }
+});
+
+// Handle the input provided by the user during execution
+app.post("/input", (req, res) => {
+    const { input } = req.body;
+
+    if (!runProcess) {
+        return res.status(400).json({ output: "Error: No running process found!" });
+    }
+
+    // Send the user input to the running process
+    runProcess.stdin.write(input + "\n");
+
+    setTimeout(() => {
+        const output = processOutput;
+        processOutput = "";
+        res.json({ output });
+    }, 200); 
 });
 
 // Cleanup temporary files
@@ -79,7 +90,6 @@ function cleanupFiles(sourceFile, executable) {
     if (fs.existsSync(executable)) fs.unlinkSync(executable);
 }
 
-// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
 });
