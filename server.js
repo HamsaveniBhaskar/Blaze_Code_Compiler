@@ -7,8 +7,8 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());  // Enable CORS
-app.use(express.json());  // Parse JSON request body
+app.use(cors());
+app.use(express.json());
 
 const activeProcesses = {};
 
@@ -28,7 +28,7 @@ app.post("/run", (req, res) => {
             if (compileCode !== 0) return res.json({ output: "Compilation failed!" });
 
             const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            const processId = Date.now().toString(); // Unique process ID for tracking
+            const processId = Date.now().toString(); // Unique process ID
             activeProcesses[processId] = runProcess;
 
             let outputBuffer = "";
