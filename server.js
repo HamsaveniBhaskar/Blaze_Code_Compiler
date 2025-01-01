@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/', async (req, res) => {
-    const { code, input } = req.body;
+    const { code } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: 'Error: No code provided!' });
@@ -38,34 +38,16 @@ app.post('/', async (req, res) => {
             let output = '';
             let error = '';
 
-            // Send input to the program's stdin
-            if (input) {
-                runProcess.stdin.write(input + '\n');
-            }
-            runProcess.stdin.end();
-
-            // Collect program output and error
+            // Allow interaction with the program (e.g., input from the user)
             runProcess.stdout.on('data', (data) => {
                 output += data.toString();
             });
+
             runProcess.stderr.on('data', (data) => {
                 error += data.toString();
             });
 
-            // Add timeout to prevent hanging
-            const timeout = setTimeout(() => {
-                runProcess.kill(); // Terminate the process if it takes too long
-                res.json({ output: 'Error: Execution timeout' });
-
-                // Clean up files
-                if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
-                if (fs.existsSync(executable)) fs.unlinkSync(executable);
-            }, 5000); // 5 seconds timeout
-
             runProcess.on('close', () => {
-                clearTimeout(timeout);
-
-                // If there's an error, return it; otherwise, return the output
                 res.json({ output: error || output.trim() || 'No output' });
 
                 // Clean up files
