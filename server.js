@@ -1,8 +1,8 @@
-const express = require('express');
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const cors = require('cors');
+const express = require("express");
+const { spawn } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const cors = require("cors");
 
 const app = express();
 const PORT = 3000;
@@ -10,63 +10,85 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-app.post('/', (req, res) => {
-    const { code, input } = req.body;
+let runProcess = null;
+
+// Handle code execution
+app.post("/", (req, res) => {
+    const { code } = req.body;
 
     if (!code) {
-        return res.status(400).json({ output: 'Error: No code provided!' });
+        return res.status(400).json({ output: "Error: No code provided!" });
     }
 
-    const sourceFile = path.join(__dirname, 'temp.cpp');
-    const executable = path.join(__dirname, 'temp.exe');
+    const sourceFile = path.join(__dirname, "temp.cpp");
+    const executable = path.join(__dirname, "temp.exe");
 
     // Write the code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
     try {
-        // Compile the code using g++ (MinGW)
-        const compileProcess = spawn('g++', [sourceFile, '-o', executable]);
+        // Compile the code
+        const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
 
-        compileProcess.on('close', (compileCode) => {
+        compileProcess.on("close", (compileCode) => {
             if (compileCode !== 0) {
-                return res.json({ output: 'Compilation failed!' });
+                return res.json({ output: "Compilation failed!" });
             }
 
             // Run the compiled executable
-            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+            runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
 
-            // Write user input to stdin (ensure that input is not prefilled)
-            if (input && input.trim() !== '') {
-                runProcess.stdin.write(input + '\n');  // Send user input to the program
-            }
-            runProcess.stdin.end(); // Close stdin after writing the input
+            let output = "";
 
-            let output = '';
-
-            runProcess.stdout.on('data', (data) => {
+            runProcess.stdout.on("data", (data) => {
                 output += data.toString();
             });
 
-            runProcess.stderr.on('data', (data) => {
+            runProcess.stderr.on("data", (data) => {
                 output += data.toString();
             });
 
-            runProcess.on('close', () => {
-                res.json({ output: output || 'No output' });
-
-                // Clean up temporary files after execution
-                fs.unlinkSync(sourceFile);
-                fs.unlinkSync(executable);
+            runProcess.on("close", () => {
+                res.json({ output });
+                cleanup(sourceFile, executable);
             });
         });
     } catch (error) {
         res.json({ output: `Error: ${error.message}` });
-
-        // Clean up temporary files in case of an error
-        if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
-        if (fs.existsSync(executable)) fs.unlinkSync(executable);
+        cleanup(sourceFile, executable);
     }
 });
+
+// Handle user input during program execution
+app.post("/input", (req, res) => {
+    const { input } = req.body;
+
+    if (runProcess) {
+        runProcess.stdin.write(input + "\n"); // Send input to the running process
+
+        let output = "";
+
+        runProcess.stdout.on("data", (data) => {
+            output += data.toString();
+        });
+
+        runProcess.stderr.on("data", (data) => {
+            output += data.toString();
+        });
+
+        runProcess.on("close", () => {
+            res.json({ output });
+        });
+    } else {
+        res.status(400).json({ output: "Error: No running process found!" });
+    }
+});
+
+// Cleanup temporary files
+function cleanup(sourceFile, executable) {
+    if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
+    if (fs.existsSync(executable)) fs.unlinkSync(executable);
+}
 
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
