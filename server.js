@@ -10,9 +10,9 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Global variables to manage the running process
+// Global variables for managing process state
 let runProcess = null;
-let processOutput = ""; // Buffer for the output
+let processOutput = ""; // Buffer to capture program output
 
 // Compile and execute the C++ code
 app.post("/", (req, res) => {
@@ -25,11 +25,11 @@ app.post("/", (req, res) => {
     const sourceFile = path.join(__dirname, "temp.cpp");
     const executable = path.join(__dirname, "temp.exe");
 
-    // Write the code to a temporary file
+    // Write the source code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
     try {
-        // Compile the C++ code
+        // Compile the code
         const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
 
         compileProcess.stderr.on("data", (data) => {
@@ -42,9 +42,9 @@ app.post("/", (req, res) => {
                 return res.json({ output: "Compilation failed. Please check your code." });
             }
 
-            // Run the compiled program
+            // Execute the compiled program
             runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            processOutput = ""; // Reset output buffer
+            processOutput = ""; // Reset the output buffer
 
             // Capture program output
             runProcess.stdout.on("data", (data) => {
@@ -62,16 +62,16 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
             });
 
-            // If input is provided, send it to the process
+            // Handle input if provided
             if (input) {
-                runProcess.stdin.write(input.trim() + "\n"); // Send input from output editor
+                runProcess.stdin.write(input.trim() + "\n"); // Send the input from the frontend to the process
             }
 
             setTimeout(() => {
                 res.json({
                     output: processOutput || "No output received!",
                 });
-                processOutput = ""; // Clear buffer after sending output
+                processOutput = ""; // Clear the output buffer
             }, 200);
         });
     } catch (error) {
