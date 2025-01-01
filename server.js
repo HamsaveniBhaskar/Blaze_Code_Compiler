@@ -10,10 +10,6 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-let runProcess = null; // Store the running process
-let outputBuffer = ''; // Buffer to store program output
-
-// Endpoint to run the C++ code
 app.post('/', async (req, res) => {
     const { code } = req.body;
 
@@ -24,58 +20,62 @@ app.post('/', async (req, res) => {
     const sourceFile = path.join(__dirname, 'temp.cpp');
     const executable = path.join(__dirname, 'temp.exe');
 
+    // Write the code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
     try {
-        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17', '-O2']);
+        // Compile the code using g++
+        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-O2']);
 
         compileProcess.on('close', (compileCode) => {
             if (compileCode !== 0) {
+                cleanupFiles(sourceFile, executable);
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Run the compiled program
-            runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+            // Run the compiled executable
+            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+            let outputBuffer = '';
+            let errorBuffer = '';
+            let responseSent = false; // Flag to track if the response has already been sent
 
             runProcess.stdout.on('data', (data) => {
                 outputBuffer += data.toString();
-                if (outputBuffer.includes('Enter')) {
+
+                // If the output contains an input prompt (e.g., "Enter"), send the partial output to the client
+                if (outputBuffer.includes('Enter') && !responseSent) {
                     res.json({ output: outputBuffer.trim(), waitingForInput: true });
-                    outputBuffer = '';
+                    responseSent = true;
+                    outputBuffer = ''; // Clear the buffer for further input/output handling
                 }
             });
 
             runProcess.stderr.on('data', (data) => {
-                outputBuffer += data.toString();
+                errorBuffer += data.toString();
             });
 
-            runProcess.on('close', () => {
-                res.json({ output: outputBuffer.trim(), waitingForInput: false });
-                runProcess = null;
-                outputBuffer = '';
-                fs.unlinkSync(sourceFile);
-                fs.unlinkSync(executable);
+            runProcess.on('close', (runCode) => {
+                if (!responseSent) {
+                    // If no response has been sent yet, send the final output or error
+                    const finalOutput = errorBuffer || outputBuffer || 'No output';
+                    res.json({ output: finalOutput.trim(), waitingForInput: false });
+                }
+                cleanupFiles(sourceFile, executable);
             });
         });
     } catch (err) {
         res.json({ output: `Error: ${err.message}` });
-        if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
-        if (fs.existsSync(executable)) fs.unlinkSync(executable);
+        cleanupFiles(sourceFile, executable);
     }
 });
 
-// Endpoint to send input to the running process
-app.post('/input', (req, res) => {
-    const { input } = req.body;
-
-    if (runProcess) {
-        runProcess.stdin.write(input + '\n');
-        res.json({ output: 'Input received.', waitingForInput: true });
-    } else {
-        res.status(400).json({ output: 'Error: No running process!' });
-    }
-});
+// Helper function to clean up temporary files
+function cleanupFiles(sourceFile, executable) {
+    if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
+    if (fs.existsSync(executable)) fs.unlinkSync(executable);
+}
 
 app.listen(PORT, () => {
-    console.log(`Server is running at http://localhost:${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
