@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/', async (req, res) => {
-    const { code, input } = req.body;
+    const { code } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: 'Error: No code provided!' });
@@ -32,28 +32,16 @@ app.post('/', async (req, res) => {
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Spawn the executable
-            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+            // Start the executable
+            const runProcess = spawn(executable, [], { stdio: 'inherit' });
 
-            let output = '';
-
-            // Write the input to stdin and close it
-            if (input) {
-                runProcess.stdin.write(input + '\n');
-            }
-            runProcess.stdin.end();
-
-            // Capture the program's output and errors
-            runProcess.stdout.on('data', (data) => {
-                output += data.toString();
-            });
-            runProcess.stderr.on('data', (data) => {
-                output += data.toString();
-            });
-
-            // On process close, send the output back
-            runProcess.on('close', () => {
-                res.json({ output: output.trim() || 'No output' });
+            // Handle when the program finishes
+            runProcess.on('close', (runCode) => {
+                if (runCode === 0) {
+                    res.json({ output: 'Program executed successfully.' });
+                } else {
+                    res.json({ output: 'Program execution failed!' });
+                }
 
                 // Cleanup temporary files
                 if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
