@@ -10,20 +10,20 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Global variables for managing input prompt and interaction
+// Global variable to track the input request IDs
 let inputRequestId = 0;
 
 app.post("/", (req, res) => {
-    const { code, input, inputRequestId } = req.body;
+    const { code, input, inputRequestId: reqInputRequestId } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: "Error: No code provided!" });
     }
 
+    // Write the source code to a temporary file
     const sourceFile = path.join(__dirname, "temp.cpp");
     const executable = path.join(__dirname, "temp.exe");
 
-    // Write the source code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
     try {
@@ -43,7 +43,6 @@ app.post("/", (req, res) => {
             // Execute the compiled program
             const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
             
-            // Handle output of the program
             let processOutput = "";
             runProcess.stdout.on("data", (data) => {
                 processOutput += data.toString();
@@ -53,21 +52,22 @@ app.post("/", (req, res) => {
                 processOutput += "Error: " + data.toString();
             });
 
-            runProcess.on("close", (exitCode) => {
-                console.log("Program terminated with code:", exitCode);
+            runProcess.on("close", () => {
                 cleanupFiles(sourceFile, executable);
             });
 
-            // If the program requests input, we will return that
-            if (inputRequestId && input) {
-                runProcess.stdin.write(input + "\n");
-            } else if (inputRequestId) {
-                // If there's no input, request the user for input in the frontend
+            // If an input is needed, send back the prompt and wait for user input
+            if (reqInputRequestId) {
                 inputRequestId++;
                 return res.json({
                     inputPrompt: "Enter a Number: ",  // Prompt asking for input
                     inputRequestId: inputRequestId,
                 });
+            }
+
+            // Once input is provided, continue executing the program with that input
+            if (input) {
+                runProcess.stdin.write(input + "\n");
             }
 
             // Return the output of the program
