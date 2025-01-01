@@ -55,10 +55,8 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
             });
 
-            setTimeout(() => {
-                res.json({ output: processOutput });
-                processOutput = ""; // Reset buffer after response
-            }, 200); 
+            // Don't send output yet, wait for user input
+            res.json({ output: "" });
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
