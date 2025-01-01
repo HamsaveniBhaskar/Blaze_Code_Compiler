@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/', (req, res) => {
-    const { code, input } = req.body;
+    const { code, input } = req.body;  // Input is now coming from the output editor
 
     if (!code) {
         return res.status(400).json({ output: 'Error: No code provided!' });
@@ -35,11 +35,11 @@ app.post('/', (req, res) => {
             // Run the compiled executable
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-            // Write user input to stdin (ensure that input is not prefilled)
+            // Pass the input (from the output editor) to the executable as if it was cin input
             if (input && input.trim() !== '') {
                 runProcess.stdin.write(input + '\n');  // Send user input to the program
             }
-            runProcess.stdin.end(); // Close stdin after writing the input
+            runProcess.stdin.end();  // End the input stream
 
             let output = '';
 
