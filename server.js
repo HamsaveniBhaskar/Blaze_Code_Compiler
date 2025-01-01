@@ -69,7 +69,7 @@ app.post("/input", (req, res) => {
     }
 
     // Write the input to the running process
-    runProcess.stdin.write(input + "\n");
+    runProcess.stdin.write(input.trim() + "\n");
 
     // Collect the output after input
     setTimeout(() => {
