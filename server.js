@@ -5,13 +5,15 @@ const path = require("path");
 const cors = require("cors");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+app.use(cors());  // Allow cross-origin requests from any domain
+app.use(express.json());  // Parse JSON requests
 
+// Store active processes for each running code
 const activeProcesses = {};
 
+// Route to compile and run the C++ code
 app.post("/run", (req, res) => {
     const { code } = req.body;
 
@@ -37,7 +39,7 @@ app.post("/run", (req, res) => {
 
             // Run the compiled executable
             const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            const processId = Date.now().toString();
+            const processId = Date.now().toString(); // Unique ID for this process
             activeProcesses[processId] = runProcess;
 
             let outputBuffer = "";
@@ -45,9 +47,14 @@ app.post("/run", (req, res) => {
             runProcess.stdout.on("data", (data) => {
                 outputBuffer += data.toString();
 
+                // Check if the program is waiting for input
                 if (outputBuffer.includes("Enter")) {
-                    res.json({ output: outputBuffer.trim(), processId, waitingForInput: true });
-                    outputBuffer = "";
+                    res.json({
+                        output: outputBuffer.trim(),
+                        processId,
+                        waitingForInput: true
+                    });
+                    outputBuffer = ""; // Clear the output buffer for next prompt
                 }
             });
 
@@ -66,6 +73,7 @@ app.post("/run", (req, res) => {
     }
 });
 
+// Route to handle user input for running processes
 app.post("/enter", (req, res) => {
     const { processId, input } = req.body;
 
@@ -75,6 +83,7 @@ app.post("/enter", (req, res) => {
 
     const runProcess = activeProcesses[processId];
 
+    // Write the input to the process's stdin
     runProcess.stdin.write(input + "\n");
 
     let outputBuffer = "";
@@ -82,16 +91,26 @@ app.post("/enter", (req, res) => {
     runProcess.stdout.once("data", (data) => {
         outputBuffer += data.toString();
 
+        // Check if the process is still waiting for input or finished
         if (outputBuffer.includes("Enter")) {
-            res.json({ output: outputBuffer.trim(), waitingForInput: true });
+            res.json({
+                output: outputBuffer.trim(),
+                waitingForInput: true
+            });
         } else {
-            res.json({ output: outputBuffer.trim(), waitingForInput: false });
+            res.json({
+                output: outputBuffer.trim(),
+                waitingForInput: false
+            });
         }
     });
 
     runProcess.stderr.once("data", (data) => {
         outputBuffer += data.toString();
-        res.json({ output: outputBuffer.trim(), waitingForInput: false });
+        res.json({
+            output: outputBuffer.trim(),
+            waitingForInput: false
+        });
     });
 });
 
@@ -101,6 +120,7 @@ function cleanupFiles(sourceFile, executable) {
     if (fs.existsSync(executable)) fs.unlinkSync(executable);
 }
 
+// Start the server
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
