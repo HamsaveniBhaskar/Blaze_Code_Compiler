@@ -35,9 +35,9 @@ app.post('/', (req, res) => {
             // Run the compiled executable
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-            // Write input to the stdin of the running executable
-            if (input) {
-                runProcess.stdin.write(input + '\n');  // Send input to the program
+            // Write user input to stdin (ensure that input is not prefilled)
+            if (input && input.trim() !== '') {
+                runProcess.stdin.write(input + '\n');  // Send user input to the program
             }
             runProcess.stdin.end(); // Close stdin after writing the input
 
