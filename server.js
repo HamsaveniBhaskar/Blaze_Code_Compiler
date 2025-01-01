@@ -56,29 +56,23 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
                 // Remove from active requests once done
                 delete activeRequests[inputRequestId];
-            });
-
-            // If an input is needed, store the request and prompt for input
-            if (inputRequestId) {
-                activeRequests[inputRequestId] = runProcess;
-                return res.json({
-                    inputPrompt: "Enter a Number: ",  // Prompt asking for input
-                    inputRequestId: inputRequestId,
-                });
-            }
-
-            // Once input is provided, continue executing the program with that input
-            if (input) {
-                runProcess.stdin.write(input + "\n");
-                runProcess.stdin.end(); // Close stdin after writing input
-            }
-
-            // Return the output of the program after a short delay
-            setTimeout(() => {
+                
+                // Return final output after program execution
                 res.json({
                     output: processOutput || "No output received!",
                 });
-            }, 200);
+            });
+
+            // If an input is needed, store the request and wait for input
+            if (inputRequestId) {
+                activeRequests[inputRequestId] = runProcess;
+                
+                // Write user input to stdin if provided
+                if (input) {
+                    runProcess.stdin.write(input + "\n");
+                    runProcess.stdin.end(); // Close stdin after writing input
+                }
+            }
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
