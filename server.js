@@ -10,7 +10,9 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-app.post("/", (req, res) => {
+const activeProcesses = {};
+
+app.post("/run", (req, res) => {
     const { code } = req.body;
 
     if (!code) {
@@ -35,30 +37,26 @@ app.post("/", (req, res) => {
 
             // Run the compiled executable
             const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
+            const processId = Date.now().toString();
+            activeProcesses[processId] = runProcess;
 
             let outputBuffer = "";
-            let errorBuffer = "";
-            let responseSent = false;
 
             runProcess.stdout.on("data", (data) => {
                 outputBuffer += data.toString();
 
-                // If input is requested, send partial output
-                if (outputBuffer.includes("Enter") && !responseSent) {
-                    res.json({ output: outputBuffer.trim(), waitingForInput: true });
-                    responseSent = true;
+                if (outputBuffer.includes("Enter")) {
+                    res.json({ output: outputBuffer.trim(), processId, waitingForInput: true });
+                    outputBuffer = "";
                 }
             });
 
             runProcess.stderr.on("data", (data) => {
-                errorBuffer += data.toString();
+                outputBuffer += data.toString();
             });
 
             runProcess.on("close", () => {
-                if (!responseSent) {
-                    const finalOutput = errorBuffer || outputBuffer || "No output";
-                    res.json({ output: finalOutput.trim(), waitingForInput: false });
-                }
+                delete activeProcesses[processId];
                 cleanupFiles(sourceFile, executable);
             });
         });
@@ -66,6 +64,35 @@ app.post("/", (req, res) => {
         res.json({ output: `Error: ${err.message}` });
         cleanupFiles(sourceFile, executable);
     }
+});
+
+app.post("/enter", (req, res) => {
+    const { processId, input } = req.body;
+
+    if (!processId || !activeProcesses[processId]) {
+        return res.status(400).json({ output: "Error: Invalid process ID!" });
+    }
+
+    const runProcess = activeProcesses[processId];
+
+    runProcess.stdin.write(input + "\n");
+
+    let outputBuffer = "";
+
+    runProcess.stdout.once("data", (data) => {
+        outputBuffer += data.toString();
+
+        if (outputBuffer.includes("Enter")) {
+            res.json({ output: outputBuffer.trim(), waitingForInput: true });
+        } else {
+            res.json({ output: outputBuffer.trim(), waitingForInput: false });
+        }
+    });
+
+    runProcess.stderr.once("data", (data) => {
+        outputBuffer += data.toString();
+        res.json({ output: outputBuffer.trim(), waitingForInput: false });
+    });
 });
 
 // Helper function to clean up temporary files
