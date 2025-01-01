@@ -37,7 +37,7 @@ app.post("/", (req, res) => {
         compileProcess.on("close", (compileCode) => {
             if (compileCode !== 0) {
                 cleanupFiles(sourceFile, executable);
-                return res.json({ output: "Compilation failed. Please check your code." });
+                return res.json({ output: "" });  // Return empty output
             }
 
             // Execute the compiled program
@@ -56,26 +56,16 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
             });
 
-            // If an input is needed, send back the prompt and wait for user input
-            if (reqInputRequestId) {
-                inputRequestId++;
-                return res.json({
-                    inputPrompt: "Enter a Number: ",  // Prompt asking for input
-                    inputRequestId: inputRequestId,
-                });
+            // Check if the code only has input logic and no output
+            if (!processOutput) {
+                // If there's no output, send empty response to frontend
+                return res.json({ output: "" });
             }
 
-            // Once input is provided, continue executing the program with that input
-            if (input) {
-                runProcess.stdin.write(input + "\n");
-            }
-
-            // Return the output of the program
-            setTimeout(() => {
-                res.json({
-                    output: processOutput || "No output received!",
-                });
-            }, 200);
+            // If output exists, send it back
+            res.json({
+                output: processOutput,
+            });
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
