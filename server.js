@@ -50,4 +50,9 @@ function runCode() {
         loader.style.display = 'none';
         runner.style.display = 'flex';
     });
+    const PORT = process.env.PORT || 3000; // Use environment variable for dynamic port handling in cloud services
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});
+
 }
