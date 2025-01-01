@@ -107,17 +107,6 @@ function cleanupFiles(sourceFile, executable) {
     if (fs.existsSync(executable)) fs.unlinkSync(executable);
 }
 
-/**
- * Terminate the running process (optional cleanup endpoint)
- */
-app.post("/cleanup", (req, res) => {
-    if (runProcess) {
-        runProcess.kill(); // Kill the running process
-        runProcess = null;
-    }
-    res.json({ output: "Process terminated." });
-});
-
 // Start the server
 app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
