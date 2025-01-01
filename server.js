@@ -1,41 +1,73 @@
 const express = require('express');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
+
 const app = express();
-const bodyParser = require('body-parser');
-const { exec } = require('child_process');
+const PORT = 3000;
 
-// Use JSON parser for POST request
-app.use(bodyParser.json());
+app.use(cors());
+app.use(express.json());
 
-// Endpoint to run the code
 app.post('/', (req, res) => {
     const { code, input } = req.body;
 
-    // Save the code to a temporary file
-    const fs = require('fs');
-    const filename = 'temp_program.cpp';
+    if (!code) {
+        return res.status(400).json({ output: 'Error: No code provided!' });
+    }
 
-    // Write code to a file
-    fs.writeFileSync(filename, code);
+    const sourceFile = path.join(__dirname, 'temp.cpp');
+    const executable = path.join(__dirname, 'temp.exe');
 
-    // Compile the C++ code
-    exec(`g++ ${filename} -o temp_program`, (compileErr, stdout, stderr) => {
-        if (compileErr || stderr) {
-            return res.json({ error: { fullError: stderr || compileErr } });
-        }
+    // Write the code to a temporary file
+    fs.writeFileSync(sourceFile, code);
 
-        // If compilation is successful, execute the compiled program with the input
-        exec(`echo "${input}" | ./temp_program`, (execErr, execStdout, execStderr) => {
-            if (execErr || execStderr) {
-                return res.json({ error: { fullError: execStderr || execErr } });
+    try {
+        // Compile the code using g++ (MinGW)
+        const compileProcess = spawn('g++', [sourceFile, '-o', executable]);
+
+        compileProcess.on('close', (compileCode) => {
+            if (compileCode !== 0) {
+                return res.json({ output: 'Compilation failed!' });
             }
 
-            // Send the output from the execution back to the frontend
-            res.json({ output: execStdout });
+            // Run the compiled executable
+            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+            // Write user input to stdin (ensure that input is not prefilled)
+            if (input && input.trim() !== '') {
+                runProcess.stdin.write(input + '\n');  // Send user input to the program
+            }
+            runProcess.stdin.end(); // Close stdin after writing the input
+
+            let output = '';
+
+            runProcess.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+
+            runProcess.stderr.on('data', (data) => {
+                output += data.toString();
+            });
+
+            runProcess.on('close', () => {
+                res.json({ output: output || 'No output' });
+
+                // Clean up temporary files after execution
+                fs.unlinkSync(sourceFile);
+                fs.unlinkSync(executable);
+            });
         });
-    });
+    } catch (error) {
+        res.json({ output: `Error: ${error.message}` });
+
+        // Clean up temporary files in case of an error
+        if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
+        if (fs.existsSync(executable)) fs.unlinkSync(executable);
+    }
 });
 
-// Start the server on port 3000
-app.listen(3000, () => {
-    console.log('Server is running on http://localhost:3000');
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
