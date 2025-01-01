@@ -4,14 +4,13 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const os = require('os');
 
 const app = express();
 const PORT = 3000;
 
-// Middlewares
+// Middleware to handle CORS and body parsing
 app.use(cors());
-app.use(bodyParser.json({ limit: '50mb' })); // For handling large requests
+app.use(bodyParser.json({ limit: '50mb' })); // Handle large request bodies
 
 // Temp directories for compiled code and executables
 const tempDir = path.join(__dirname, 'temp');
@@ -23,15 +22,15 @@ if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir);
 }
 
-// Handle compilation and execution
+// Handle C++ code compilation and execution
 app.post('/', async (req, res) => {
-    const { code, input } = req.body;
+    const { code, input } = req.body; // Receive code and input from the client
 
     if (!code) {
         return res.status(400).json({ output: 'Error: No code provided!' });
     }
 
-    // Write the code to a temporary file
+    // Write code to a temporary file
     fs.writeFileSync(sourceFile, code);
 
     try {
@@ -48,16 +47,16 @@ app.post('/', async (req, res) => {
             compileError += data.toString();
         });
 
-        // After compilation completes
+        // After compilation is complete, run the executable
         compileProcess.on('close', (compileCode) => {
             if (compileCode !== 0) {
-                // Clean up if compilation failed
+                // Clean up temporary files if compilation failed
                 cleanup();
                 return res.json({ output: `Compilation failed: ${compileError || 'Unknown error'}` });
             }
 
-            // Run the executable
-            runExecutable(input, res);
+            // If compilation is successful, proceed to run the code
+            runExecutable(input, res); // Pass the input provided by the user
         });
     } catch (err) {
         cleanup();
@@ -65,19 +64,19 @@ app.post('/', async (req, res) => {
     }
 });
 
-// Function to run the compiled executable
+// Function to run the compiled executable with user input
 const runExecutable = (input, res) => {
     const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '';
     let error = '';
 
-    // Send input to the C++ program
+    // Ensure the input is passed only when the user provides it
     if (input) {
         runProcess.stdin.write(input + '\n');
     }
-    runProcess.stdin.end(); // End input stream after writing
+    runProcess.stdin.end(); // Close the input stream after writing
 
-    // Collect output and error
+    // Capture the output and error from the C++ program
     runProcess.stdout.on('data', (data) => {
         output += data.toString();
     });
@@ -86,7 +85,7 @@ const runExecutable = (input, res) => {
         error += data.toString();
     });
 
-    // When execution finishes, send response
+    // When execution finishes, send the output or error back to the client
     runProcess.on('close', () => {
         cleanup(); // Clean up temporary files
 
@@ -94,12 +93,12 @@ const runExecutable = (input, res) => {
             return res.json({ output: `Execution failed: ${error}` });
         }
 
-        // Respond with the output or a default message if no output
+        // Send the output back to the client (or a default message if no output)
         res.json({ output: output.trim() || 'No output' });
     });
 };
 
-// Function to clean up temporary files
+// Clean up temporary files after execution
 const cleanup = () => {
     try {
         if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
@@ -114,13 +113,14 @@ app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
 });
 
-// Optimized error handling to gracefully shutdown
+// Handle uncaught exceptions and clean up resources
 process.on('uncaughtException', (err) => {
     console.error('Unhandled exception:', err);
     cleanup();
     process.exit(1);
 });
 
+// Graceful shutdown on server termination
 process.on('SIGINT', () => {
     console.log('Server is shutting down...');
     cleanup();
