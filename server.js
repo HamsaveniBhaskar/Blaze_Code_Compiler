@@ -25,24 +25,25 @@ app.post('/', async (req, res) => {
 
     try {
         // Compile the code using g++
-        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17']);
+        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17', '-O2']);
 
         compileProcess.on('close', (compileCode) => {
             if (compileCode !== 0) {
                 return res.json({ output: 'Compilation failed!' });
             }
 
+            // Spawn the executable
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
             let output = '';
 
-            // Write the input all at once and close the stdin
+            // Write the input to stdin and close it
             if (input) {
-                runProcess.stdin.write(input);
-                runProcess.stdin.end();
+                runProcess.stdin.write(input + '\n');
             }
+            runProcess.stdin.end();
 
-            // Capture output and errors
+            // Capture the program's output and errors
             runProcess.stdout.on('data', (data) => {
                 output += data.toString();
             });
@@ -50,12 +51,13 @@ app.post('/', async (req, res) => {
                 output += data.toString();
             });
 
+            // On process close, send the output back
             runProcess.on('close', () => {
                 res.json({ output: output.trim() || 'No output' });
 
                 // Cleanup temporary files
-                fs.unlinkSync(sourceFile);
-                fs.unlinkSync(executable);
+                if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
+                if (fs.existsSync(executable)) fs.unlinkSync(executable);
             });
         });
     } catch (error) {
