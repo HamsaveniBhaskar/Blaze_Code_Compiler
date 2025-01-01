@@ -37,11 +37,17 @@ app.post('/', async (req, res) => {
 
             let output = '';
 
+            // Write the input to the stdin of the process
+            if (input) {
+                runProcess.stdin.write(input + '\n');
+            }
+            runProcess.stdin.end();
+
             runProcess.stdout.on('data', (data) => (output += data.toString()));
             runProcess.stderr.on('data', (data) => (output += data.toString()));
 
             runProcess.on('close', () => {
-                res.json({ output: output || 'No output' });
+                res.json({ output: output.trim() || 'No output' });
 
                 // Cleanup temporary files
                 fs.unlinkSync(sourceFile);
