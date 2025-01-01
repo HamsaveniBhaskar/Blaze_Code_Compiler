@@ -14,9 +14,7 @@ app.use(express.json());
 let runProcess = null;
 let processOutput = ""; // Buffer for the output
 
-/**
- * Compile and execute the C++ code
- */
+// Compile and execute the C++ code
 app.post("/", (req, res) => {
     const { code, input } = req.body;
 
@@ -82,9 +80,7 @@ app.post("/", (req, res) => {
     }
 });
 
-/**
- * Cleanup temporary files
- */
+// Cleanup temporary files
 function cleanupFiles(sourceFile, executable) {
     if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
     if (fs.existsSync(executable)) fs.unlinkSync(executable);
