@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-const activeProcesses = {};
+let activeProcesses = {};
 
 app.post("/run", (req, res) => {
     const { code } = req.body;
@@ -37,7 +37,7 @@ app.post("/run", (req, res) => {
                 outputBuffer += data.toString();
                 if (outputBuffer.includes("Enter")) {
                     res.json({ output: outputBuffer, waitingForInput: true, processId });
-                    outputBuffer = "";
+                    outputBuffer = ""; // Clear the buffer after sending the response
                 }
             });
 
@@ -58,7 +58,9 @@ app.post("/run", (req, res) => {
 
 app.post("/enter", (req, res) => {
     const { processId, input } = req.body;
-    if (!processId || !activeProcesses[processId]) return res.status(400).json({ output: "Error: Invalid process ID!" });
+    if (!processId || !activeProcesses[processId]) {
+        return res.status(400).json({ output: "Error: Invalid process ID!" });
+    }
 
     const runProcess = activeProcesses[processId];
     runProcess.stdin.write(input + "\n");
