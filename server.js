@@ -35,8 +35,10 @@ app.post("/run", (req, res) => {
 
             runProcess.stdout.on("data", (data) => {
                 outputBuffer += data.toString();
+
+                // Only send a response when we encounter a prompt for input
                 if (outputBuffer.includes("Enter")) {
-                    // Send only one response here and do not send more.
+                    // Send the response only when required, with the prompt and process ID
                     if (!res.headersSent) {
                         res.json({
                             output: outputBuffer,
@@ -44,7 +46,7 @@ app.post("/run", (req, res) => {
                             processId
                         });
                     }
-                    outputBuffer = ""; // Clear the buffer after sending the response
+                    outputBuffer = ""; // Reset the buffer after sending the response
                 }
             });
 
