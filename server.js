@@ -10,7 +10,7 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-app.post('/', async (req, res) => {
+app.post('/execute', async (req, res) => {
     const { code } = req.body;
 
     if (!code) {
@@ -32,51 +32,50 @@ app.post('/', async (req, res) => {
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Step 3: Run the compiled program
-            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+            // Step 3: Execute the compiled program
+            const runProcess = spawn(executable);
 
             let output = '';
             let currentPrompt = '';
             let inputQueue = [];
+            let isPromptSent = false;
 
-            // Listen for stdout (prompts from the program)
+            // Handle program output (stdout)
             runProcess.stdout.on('data', (data) => {
                 const dataString = data.toString();
                 output += dataString;
-                currentPrompt += dataString;
 
-                // If the program asks for input, send the current prompt to the client
-                if (currentPrompt.includes(':')) {
-                    res.write(JSON.stringify({ prompt: currentPrompt }));
-                    currentPrompt = ''; // Reset the prompt
+                // Check if the program is asking for input (e.g., contains ':')
+                if (!isPromptSent && dataString.includes(':')) {
+                    currentPrompt += dataString;
+                    res.write(JSON.stringify({ prompt: currentPrompt })); // Send prompt to the client
+                    currentPrompt = '';
+                    isPromptSent = true;
                 }
             });
 
-            // Listen for stderr (errors from the program)
+            // Handle program errors (stderr)
             runProcess.stderr.on('data', (data) => {
                 output += data.toString();
             });
 
-            // Handle user input dynamically
+            // Handle client input dynamically
             req.on('data', (data) => {
                 inputQueue.push(data.toString().trim());
 
                 // Send the input to the program
                 if (inputQueue.length > 0) {
                     runProcess.stdin.write(inputQueue.shift() + '\n');
+                    isPromptSent = false; // Reset prompt flag after input
                 }
             });
 
-            req.on('end', () => {
-                runProcess.stdin.end();
-            });
-
-            // When the program finishes, send the final output
-            runProcess.on('close', (runCode) => {
+            // Handle program completion
+            runProcess.on('close', (code) => {
                 res.end(
                     JSON.stringify({
                         output: output.trim(),
-                        status: runCode === 0 ? 'Execution Successful' : 'Execution Failed',
+                        status: code === 0 ? 'Execution Successful' : 'Execution Failed',
                     })
                 );
 
