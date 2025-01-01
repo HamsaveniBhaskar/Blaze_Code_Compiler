@@ -1,4 +1,59 @@
-            runProcess.on('close', (runCode) => {
+const express = require('express');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
+
+const app = express();
+const PORT = 3000;
+
+app.use(cors());
+app.use(express.json());
+
+app.post('/', async (req, res) => {
+    const { code } = req.body;
+
+    if (!code) {
+        return res.status(400).json({ output: 'Error: No code provided!' });
+    }
+
+    const sourceFile = path.join(__dirname, 'temp.cpp');
+    const executable = path.join(__dirname, 'temp.exe');
+
+    // Write the code to a temporary file
+    fs.writeFileSync(sourceFile, code);
+
+    try {
+        // Compile the code using g++
+        const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17', '-O2']);
+
+        compileProcess.on('close', (compileCode) => {
+            if (compileCode !== 0) {
+                return res.json({ output: 'Compilation failed!' });
+            }
+
+            // Spawn the executable
+            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
+
+            let output = '';
+            let promptIndex = 0;
+
+            const prompts = [];
+
+            runProcess.stdout.on('data', (data) => {
+                const prompt = data.toString();
+                output += prompt;
+                prompts.push(prompt);
+
+                // Send the current prompt back to the client and wait for input
+                res.write(`${prompt}`);
+            });
+
+            runProcess.stderr.on('data', (data) => {
+                output += data.toString();
+            });
+
+runProcess.on('close', (runCode) => {
                 // Finalize the response when the program finishes execution
                 if (runCode === 0) {
                     output += "\n=== Code Execution Successful ===";
