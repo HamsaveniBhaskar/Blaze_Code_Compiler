@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/', (req, res) => {
-    const { code, input } = req.body;  // Input is now coming from the output editor
+    const { code, input } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: 'Error: No code provided!' });
@@ -35,13 +35,16 @@ app.post('/', (req, res) => {
             // Run the compiled executable
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-            // Pass the input (from the output editor) to the executable as if it was cin input
-            if (input && input.trim() !== '') {
-                runProcess.stdin.write(input + '\n');  // Send user input to the program
-            }
-            runProcess.stdin.end();  // End the input stream
-
             let output = '';
+            let prompt = ''; // To store the prompt for user input
+
+            // If input is required, simulate waiting for input
+            if (inputIndex === 0) {
+                prompt = "Enter a Number:";
+            } else {
+                // Send user input to the program as cin
+                runProcess.stdin.write(input + '\n');
+            }
 
             runProcess.stdout.on('data', (data) => {
                 output += data.toString();
@@ -52,7 +55,11 @@ app.post('/', (req, res) => {
             });
 
             runProcess.on('close', () => {
-                res.json({ output: output || 'No output' });
+                if (output.indexOf("Enter a Number:") !== -1) {
+                    return res.json({ prompt: prompt }); // Wait for input
+                } else {
+                    res.json({ output: output || 'No output' });
+                }
 
                 // Clean up temporary files after execution
                 fs.unlinkSync(sourceFile);
@@ -61,7 +68,7 @@ app.post('/', (req, res) => {
         });
     } catch (error) {
         res.json({ output: `Error: ${error.message}` });
-
+        
         // Clean up temporary files in case of an error
         if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
         if (fs.existsSync(executable)) fs.unlinkSync(executable);
