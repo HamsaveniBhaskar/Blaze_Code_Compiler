@@ -10,11 +10,11 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// Global variable to track active requests
-let activeRequests = {};
+// Global variable to track the input request IDs
+let inputRequestId = 0;
 
 app.post("/", (req, res) => {
-    const { code, input, inputRequestId } = req.body;
+    const { code, input, inputRequestId: reqInputRequestId } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: "Error: No code provided!" });
@@ -54,25 +54,28 @@ app.post("/", (req, res) => {
 
             runProcess.on("close", () => {
                 cleanupFiles(sourceFile, executable);
-                // Remove from active requests once done
-                delete activeRequests[inputRequestId];
-                
-                // Return final output after program execution
+            });
+
+            // If an input is needed, send back the prompt and wait for user input
+            if (reqInputRequestId) {
+                inputRequestId++;
+                return res.json({
+                    inputPrompt: "Enter a Number: ",  // Prompt asking for input
+                    inputRequestId: inputRequestId,
+                });
+            }
+
+            // Once input is provided, continue executing the program with that input
+            if (input) {
+                runProcess.stdin.write(input + "\n");
+            }
+
+            // Return the output of the program
+            setTimeout(() => {
                 res.json({
                     output: processOutput || "No output received!",
                 });
-            });
-
-            // If an input is needed, store the request and wait for input
-            if (inputRequestId) {
-                activeRequests[inputRequestId] = runProcess;
-                
-                // Write user input to stdin if provided
-                if (input) {
-                    runProcess.stdin.write(input + "\n");
-                    runProcess.stdin.end(); // Close stdin after writing input
-                }
-            }
+            }, 200);
         });
     } catch (error) {
         res.json({ output: `Server error: ${error.message}` });
