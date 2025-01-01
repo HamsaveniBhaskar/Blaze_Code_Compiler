@@ -20,11 +20,11 @@ app.post('/', async (req, res) => {
     const sourceFile = path.join(__dirname, 'temp.cpp');
     const executable = path.join(__dirname, 'temp.exe');
 
-    // Write the code to a temporary file
-    fs.writeFileSync(sourceFile, code);
-
     try {
-        // Compile the code using g++
+        // Step 1: Write code to a temporary file
+        fs.writeFileSync(sourceFile, code);
+
+        // Step 2: Compile the code
         const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17', '-O2']);
 
         compileProcess.on('close', (compileCode) => {
@@ -32,50 +32,57 @@ app.post('/', async (req, res) => {
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Spawn the executable
+            // Step 3: Run the compiled program
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
             let output = '';
-            let promptIndex = 0;
+            let currentPrompt = '';
+            let inputQueue = [];
 
-            const prompts = [];
-
+            // Listen for stdout (prompts from the program)
             runProcess.stdout.on('data', (data) => {
-                const prompt = data.toString();
-                output += prompt;
-                prompts.push(prompt);
+                const dataString = data.toString();
+                output += dataString;
+                currentPrompt += dataString;
 
-                // Send the current prompt back to the client and wait for input
-                res.write(`${prompt}`);
+                // If the program asks for input, send the current prompt to the client
+                if (currentPrompt.includes(':')) {
+                    res.write(JSON.stringify({ prompt: currentPrompt }));
+                    currentPrompt = ''; // Reset the prompt
+                }
             });
 
+            // Listen for stderr (errors from the program)
             runProcess.stderr.on('data', (data) => {
                 output += data.toString();
             });
 
-runProcess.on('close', (runCode) => {
-                // Finalize the response when the program finishes execution
-                if (runCode === 0) {
-                    output += "\n=== Code Execution Successful ===";
-                    res.end(`${output}`);
-                } else {
-                    res.end("Error: Program execution failed!");
+            // Handle user input dynamically
+            req.on('data', (data) => {
+                inputQueue.push(data.toString().trim());
+
+                // Send the input to the program
+                if (inputQueue.length > 0) {
+                    runProcess.stdin.write(inputQueue.shift() + '\n');
                 }
+            });
+
+            req.on('end', () => {
+                runProcess.stdin.end();
+            });
+
+            // When the program finishes, send the final output
+            runProcess.on('close', (runCode) => {
+                res.end(
+                    JSON.stringify({
+                        output: output.trim(),
+                        status: runCode === 0 ? 'Execution Successful' : 'Execution Failed',
+                    })
+                );
 
                 // Cleanup temporary files
                 if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
                 if (fs.existsSync(executable)) fs.unlinkSync(executable);
-            });
-
-            // Handle user inputs
-            req.on('data', (data) => {
-                // Send user input to the program's stdin
-                runProcess.stdin.write(data.toString() + '\n');
-            });
-
-            req.on('end', () => {
-                // End the stdin stream when input is finished
-                runProcess.stdin.end();
             });
         });
     } catch (error) {
