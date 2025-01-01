@@ -1,58 +1,59 @@
-function runCode() {
-    const loader = document.getElementById('loader');
-    const runner = document.getElementById('run');
-    
-    runner.style.display = 'none';
-    loader.style.display = 'inline-block';
+const express = require('express');
+const bodyParser = require('body-parser');
+const { exec } = require('child_process');
+const app = express();
+const path = require('path');
 
-    // Retrieve the code from the editor
-    const code = editor.getValue();
-    
-    console.log('Code:', code);  // Log the code to ensure it's being captured correctly
-    
-    outputEditor.setValue("Executing...");
-    outputEditor.clearSelection();
+const PORT = process.env.PORT || 3000;
 
-    // Make the POST request to the backend (your Render service)
-    fetch("https://blaze-code-compiler.onrender.com", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            code,  // The code from the editor
-            input: '32'  // Test with a fixed input for now
-        }),
-    })
-    .then(response => {
-        console.log('Received response:', response);  // Log the response
-        if (!response.ok) {
-            throw new Error(`Server Error: ${response.statusText}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        console.log('Response data:', data);  // Log the data received from the backend
-        if (data.error) {
-            outputEditor.setValue(data.error.fullError || "No output received!");
-        } else {
-            outputEditor.setValue(data.output || "No output received!");
+// Middleware
+app.use(bodyParser.json());
+
+// Serve static files (if needed)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Route to compile and run the C++ code
+app.post('/', (req, res) => {
+    const { code, input } = req.body;
+
+    // Step 1: Create a temporary C++ file
+    const fs = require('fs');
+    const cppFile = path.join(__dirname, 'temp.cpp');
+
+    // Write the received C++ code to the file
+    fs.writeFileSync(cppFile, code);
+
+    // Step 2: Compile the C++ code
+    exec(`g++ ${cppFile} -o ${path.join(__dirname, 'a.out')}`, (err, stdout, stderr) => {
+        if (err) {
+            // Compilation error, return error message
+            return res.status(400).json({
+                error: {
+                    message: stderr || 'Compilation error occurred',
+                    fullError: stderr,
+                }
+            });
         }
 
-        loader.style.display = 'none';
-        runner.style.display = 'flex';
-    })
-    .catch(error => {
-        console.error("Error occurred:", error);
-        outputEditor.setValue(`Error running code: ${error.message}`);
-        outputEditor.clearSelection();
+        // Step 3: Run the compiled C++ program with input
+        exec(`echo "${input}" | ./a.out`, (runErr, runStdout, runStderr) => {
+            if (runErr) {
+                // Runtime error, return error message
+                return res.status(400).json({
+                    error: {
+                        message: runStderr || 'Runtime error occurred',
+                        fullError: runStderr,
+                    }
+                });
+            }
 
-        loader.style.display = 'none';
-        runner.style.display = 'flex';
+            // Successfully ran the code, send back the output
+            res.json({ output: runStdout });
+        });
     });
-    const PORT = process.env.PORT || 3000; // Use environment variable for dynamic port handling in cloud services
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
 });
 
-}
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+});
