@@ -36,7 +36,14 @@ app.post("/run", (req, res) => {
             runProcess.stdout.on("data", (data) => {
                 outputBuffer += data.toString();
                 if (outputBuffer.includes("Enter")) {
-                    res.json({ output: outputBuffer, waitingForInput: true, processId });
+                    // Send only one response here and do not send more.
+                    if (!res.headersSent) {
+                        res.json({
+                            output: outputBuffer,
+                            waitingForInput: true,
+                            processId
+                        });
+                    }
                     outputBuffer = ""; // Clear the buffer after sending the response
                 }
             });
@@ -51,7 +58,10 @@ app.post("/run", (req, res) => {
             });
         });
     } catch (err) {
-        res.json({ output: `Error: ${err.message}` });
+        // Only send one response if error occurs
+        if (!res.headersSent) {
+            res.json({ output: `Error: ${err.message}` });
+        }
         cleanupFiles(sourceFile, executable);
     }
 });
@@ -70,15 +80,22 @@ app.post("/enter", (req, res) => {
     runProcess.stdout.once("data", (data) => {
         outputBuffer += data.toString();
         if (outputBuffer.includes("Enter")) {
-            res.json({ output: outputBuffer, waitingForInput: true });
+            // Ensure to send the response once.
+            if (!res.headersSent) {
+                res.json({ output: outputBuffer, waitingForInput: true });
+            }
         } else {
-            res.json({ output: outputBuffer, waitingForInput: false });
+            if (!res.headersSent) {
+                res.json({ output: outputBuffer, waitingForInput: false });
+            }
         }
     });
 
     runProcess.stderr.once("data", (data) => {
         outputBuffer += data.toString();
-        res.json({ output: outputBuffer, waitingForInput: false });
+        if (!res.headersSent) {
+            res.json({ output: outputBuffer, waitingForInput: false });
+        }
     });
 });
 
