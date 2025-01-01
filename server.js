@@ -38,13 +38,14 @@ app.post('/', (req, res) => {
             let output = '';
             let prompt = ''; // To store the prompt for user input
 
-            // If input is required, simulate waiting for input
-            if (inputIndex === 0) {
-                prompt = "Enter a Number:";
-            } else {
-                // Send user input to the program as cin
-                runProcess.stdin.write(input + '\n');
+            // The inputIndex will be tracked by checking the input data
+            if (input.trim() === "" || input === undefined) {
+                prompt = "Enter a Number:";  // First prompt to get input
+                return res.json({ prompt: prompt }); // Wait for user input
             }
+
+            // Send user input to the program as cin
+            runProcess.stdin.write(input + '\n');
 
             runProcess.stdout.on('data', (data) => {
                 output += data.toString();
@@ -56,8 +57,10 @@ app.post('/', (req, res) => {
 
             runProcess.on('close', () => {
                 if (output.indexOf("Enter a Number:") !== -1) {
-                    return res.json({ prompt: prompt }); // Wait for input
+                    // If the program is expecting more input, return the prompt again
+                    return res.json({ prompt: prompt });
                 } else {
+                    // Show final output after the code execution completes
                     res.json({ output: output || 'No output' });
                 }
 
