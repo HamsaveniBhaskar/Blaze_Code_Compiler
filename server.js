@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post('/', async (req, res) => {
-    const { code } = req.body;
+    const { code, input } = req.body;
 
     if (!code) {
         return res.status(400).json({ output: 'Error: No code provided!' });
@@ -32,15 +32,33 @@ app.post('/', async (req, res) => {
                 return res.json({ output: 'Compilation failed!' });
             }
 
-            // Start the executable
-            const runProcess = spawn(executable, [], { stdio: 'inherit' });
+            // Spawn the executable
+            const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
-            // Handle when the program finishes
+            let output = '';
+            let errorOutput = '';
+
+            // Send input to the program if provided
+            if (input) {
+                runProcess.stdin.write(input + '\n');
+            }
+            runProcess.stdin.end();
+
+            // Capture stdout and stderr
+            runProcess.stdout.on('data', (data) => {
+                output += data.toString();
+            });
+
+            runProcess.stderr.on('data', (data) => {
+                errorOutput += data.toString();
+            });
+
+            // Handle process close
             runProcess.on('close', (runCode) => {
                 if (runCode === 0) {
-                    res.json({ output: 'Program executed successfully.' });
+                    res.json({ output: output.trim() || 'No output' });
                 } else {
-                    res.json({ output: 'Program execution failed!' });
+                    res.json({ output: errorOutput.trim() || 'Program execution failed!' });
                 }
 
                 // Cleanup temporary files
