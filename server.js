@@ -42,7 +42,7 @@ app.post("/", (req, res) => {
 
             // Execute the compiled program
             const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-            
+
             let processOutput = "";
             runProcess.stdout.on("data", (data) => {
                 processOutput += data.toString();
@@ -56,11 +56,11 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
             });
 
-            // If an input is needed, send back the prompt and wait for user input
-            if (reqInputRequestId !== undefined) {
+            // If the code asks for input, send back a prompt and wait for user input
+            if (reqInputRequestId) {
                 inputRequestId++;
                 return res.json({
-                    inputPrompt: "Enter a Number: ",  // Prompt asking for input
+                    inputPrompt: "Enter a Number: ",
                     inputRequestId: inputRequestId,
                 });
             }
