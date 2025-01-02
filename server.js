@@ -6,6 +6,11 @@ const { spawn } = require("child_process");
 
 const app = express();
 const port = 3000;
+const cors = require("cors");
+
+// Enable CORS
+app.use(cors());
+
 
 // Middleware
 app.use(bodyParser.json());
