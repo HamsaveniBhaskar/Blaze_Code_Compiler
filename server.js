@@ -52,12 +52,17 @@ app.post("/", (req, res) => {
         compileProcess.on("close", (compileCode) => {
             if (compileCode !== 0) {
                 // Parse error message for structured response
-                const errorLines = compileError.split("\n");
+                const errorLines = compileError.split("\n").map((line) =>
+                    line.replace(__dirname, "").replace(/\\/g, "/")
+                ); // Remove directory path and normalize slashes
+
                 const errorDetails = errorLines.find((line) =>
                     line.includes("error:") && line.match(/(\d+):(\d+)/)
                 );
 
-                let line = 0, column = 0, message = "Compilation Error";
+                let line = 0,
+                    column = 0,
+                    message = "Compilation Error";
                 if (errorDetails) {
                     const match = errorDetails.match(/:(\d+):(\d+): error: (.*)/);
                     if (match) {
@@ -71,7 +76,7 @@ app.post("/", (req, res) => {
                 cleanupFiles(sourceFile, executable);
                 return res.json({
                     error: {
-                        fullError: `Compilation Error:\n${compileError}`,
+                        fullError: `Compilation Error:\n${errorLines.join("\n")}`,
                         line,
                         column,
                         message,
