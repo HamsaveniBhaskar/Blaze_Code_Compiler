@@ -24,6 +24,9 @@ app.post('/', async (req, res) => {
     fs.writeFileSync(sourceFile, code);
 
     try {
+        // Start timer
+        const startTime = performance.now();
+
         // Compile the C++ code
         const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17', '-O2']);
 
@@ -65,8 +68,16 @@ app.post('/', async (req, res) => {
             runProcess.on('close', () => {
                 clearTimeout(timeout);
 
-                // If there's an error, return it; otherwise, return the output
-                res.json({ output: error || output.trim() || 'No output' });
+                // End timer
+                const endTime = performance.now();
+                const timeTaken = ((endTime - startTime) / 1000).toFixed(3); // Convert to seconds
+
+                // If there's an error, return it; otherwise, return the output and execution time
+                res.json({
+                    output: error || output.trim() || 'No output',
+                    status: 'Code Executed Successfully',
+                    timeTaken: `${timeTaken} seconds`
+                });
 
                 // Clean up files
                 if (fs.existsSync(sourceFile)) fs.unlinkSync(sourceFile);
@@ -83,5 +94,5 @@ app.post('/', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running at http://localhost:${PORT}`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
