@@ -11,7 +11,6 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static("public")); // Serve frontend files
 
-// Handle WebSocket connections
 wss.on("connection", (ws) => {
     ws.on("message", (message) => {
         const { type, code, input } = JSON.parse(message);
@@ -26,10 +25,13 @@ wss.on("connection", (ws) => {
             // Compile the program
             const compile = spawn("g++", [sourceFile, "-o", executable]);
 
+            compile.stderr.on("data", (data) => {
+                ws.send(JSON.stringify({ type: "error", output: data.toString() }));
+            });
+
             compile.on("close", (compileCode) => {
                 if (compileCode !== 0) {
-                    const compileError = fs.readFileSync(sourceFile + ".log", "utf8");
-                    ws.send(JSON.stringify({ type: "error", output: compileError }));
+                    ws.send(JSON.stringify({ type: "error", output: "Compilation failed!" }));
                     return;
                 }
 
@@ -48,10 +50,8 @@ wss.on("connection", (ws) => {
                     ws.send(JSON.stringify({ type: "done" }));
                 });
 
-                // Handle interactive input
                 ws.on("message", (inputMessage) => {
                     const { type, input } = JSON.parse(inputMessage);
-
                     if (type === "input") {
                         run.stdin.write(input + "\n");
                     }
@@ -63,5 +63,5 @@ wss.on("connection", (ws) => {
 
 // Start the server
 server.listen(3000, () => {
-    console.log("Server running on http://localhost:3000");
+    console.log("WebSocket server running on ws://localhost:3000");
 });
