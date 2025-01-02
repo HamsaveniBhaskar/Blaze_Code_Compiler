@@ -1,67 +1,133 @@
 const express = require("express");
-const http = require("http");
-const WebSocket = require("ws");
+const bodyParser = require("body-parser");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const cors = require("cors");
+
+// Enable CORS
+app.use(cors());
+
 
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const port = 3000;
 
-app.use(express.static("public")); // Serve frontend files
+// Middleware
+app.use(bodyParser.json());
 
-wss.on("connection", (ws) => {
-    ws.on("message", (message) => {
-        const { type, code, input } = JSON.parse(message);
-
-        if (type === "execute") {
-            const sourceFile = path.join(__dirname, "temp.cpp");
-            const executable = path.join(__dirname, "temp.exe");
-
-            // Write the code to a temporary file
-            fs.writeFileSync(sourceFile, code);
-
-            // Compile the program
-            const compile = spawn("g++", [sourceFile, "-o", executable]);
-
-            compile.stderr.on("data", (data) => {
-                ws.send(JSON.stringify({ type: "error", output: data.toString() }));
-            });
-
-            compile.on("close", (compileCode) => {
-                if (compileCode !== 0) {
-                    ws.send(JSON.stringify({ type: "error", output: "Compilation failed!" }));
-                    return;
-                }
-
-                // Run the compiled program
-                const run = spawn(executable);
-
-                run.stdout.on("data", (data) => {
-                    ws.send(JSON.stringify({ type: "output", output: data.toString() }));
-                });
-
-                run.stderr.on("data", (data) => {
-                    ws.send(JSON.stringify({ type: "error", output: data.toString() }));
-                });
-
-                run.on("close", () => {
-                    ws.send(JSON.stringify({ type: "done" }));
-                });
-
-                ws.on("message", (inputMessage) => {
-                    const { type, input } = JSON.parse(inputMessage);
-                    if (type === "input") {
-                        run.stdin.write(input + "\n");
-                    }
-                });
-            });
+// Utility function to clean up files
+function cleanupFiles(...files) {
+    files.forEach((file) => {
+        if (fs.existsSync(file)) {
+            fs.unlinkSync(file);
         }
     });
+}
+
+// POST endpoint to compile and execute C++ code
+app.post("/", (req, res) => {
+    const { code, input } = req.body;
+
+    // Check if code is provided
+    if (!code) {
+        return res.status(400).json({ error: { fullError: "Error: No code provided!" } });
+    }
+
+    // File paths for temporary source and executable files
+    const sourceFile = path.join(__dirname, "temp.cpp");
+    const executable = path.join(__dirname, "temp.exe");
+
+    // Write the code to the source file
+    fs.writeFileSync(sourceFile, code);
+
+    try {
+        // Compile the code
+        const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
+
+        let compileError = "";
+        compileProcess.stderr.on("data", (data) => {
+            compileError += data.toString();
+        });
+
+        compileProcess.on("close", (compileCode) => {
+            if (compileCode !== 0) {
+                // Parse error message for structured response
+                const errorLines = compileError.split("\n");
+                const errorDetails = errorLines.find((line) =>
+                    line.includes("error:") && line.match(/(\d+):(\d+)/)
+                );
+
+                let line = 0, column = 0, message = "Compilation Error";
+                if (errorDetails) {
+                    const match = errorDetails.match(/:(\d+):(\d+): error: (.*)/);
+                    if (match) {
+                        line = parseInt(match[1]);
+                        column = parseInt(match[2]);
+                        message = match[3].trim();
+                    }
+                }
+
+                // Clean up files and send error response
+                cleanupFiles(sourceFile, executable);
+                return res.json({
+                    error: {
+                        fullError: `Compilation Error:\n${compileError}`,
+                        line,
+                        column,
+                        message,
+                    },
+                });
+            }
+
+            // If compilation succeeds, execute the code
+            const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
+
+            let processOutput = "";
+            let executionError = "";
+
+            // Handle standard output
+            runProcess.stdout.on("data", (data) => {
+                processOutput += data.toString();
+            });
+
+            // Handle standard error
+            runProcess.stderr.on("data", (data) => {
+                executionError += data.toString();
+            });
+
+            // Handle user input if provided
+            if (input) {
+                runProcess.stdin.write(input + "\n");
+                runProcess.stdin.end();
+            }
+
+            runProcess.on("close", (runCode) => {
+                cleanupFiles(sourceFile, executable);
+
+                if (runCode !== 0) {
+                    // Runtime error occurred
+                    return res.json({
+                        error: {
+                            fullError: `Runtime Error:\n${executionError || "An error occurred during execution."}`,
+                        },
+                    });
+                }
+
+                // Return the program output
+                res.json({
+                    output: processOutput || "No output received!",
+                });
+            });
+        });
+    } catch (error) {
+        cleanupFiles(sourceFile, executable);
+        res.json({
+            error: { fullError: `Server error: ${error.message}` },
+        });
+    }
 });
 
 // Start the server
-server.listen(3000, () => {
-    console.log("WebSocket server running on ws://localhost:3000");
+app.listen(port, () => {
+    console.log(`Server is running on http://localhost:${port}`);
 });
