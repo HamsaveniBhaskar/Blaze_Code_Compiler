@@ -5,11 +5,11 @@ const path = require("path");
 const { spawn } = require("child_process");
 const cors = require("cors");
 
+const app = express(); // Initialize app first
+
 // Enable CORS
 app.use(cors());
 
-
-const app = express();
 const port = 3000;
 
 // Middleware
