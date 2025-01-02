@@ -1,108 +1,67 @@
 const express = require("express");
-const bodyParser = require("body-parser");
-const cors = require("cors");
+const http = require("http");
+const WebSocket = require("ws");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 
 const app = express();
-const port = 3000;
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
-// Middleware
-app.use(cors());
-app.use(bodyParser.json());
+app.use(express.static("public")); // Serve frontend files
 
-// Utility function to clean up files
-function cleanupFiles(...files) {
-    files.forEach((file) => {
-        if (fs.existsSync(file)) {
-            fs.unlinkSync(file);
-        }
-    });
-}
+// Handle WebSocket connections
+wss.on("connection", (ws) => {
+    ws.on("message", (message) => {
+        const { type, code, input } = JSON.parse(message);
 
-// POST endpoint to compile and execute C++ code
-app.post("/", (req, res) => {
-    const { code, inputs } = req.body; // inputs = array of input lines
+        if (type === "execute") {
+            const sourceFile = path.join(__dirname, "temp.cpp");
+            const executable = path.join(__dirname, "temp.exe");
 
-    // Check if code is provided
-    if (!code) {
-        return res.status(400).json({ output: "Error: No code provided!" });
-    }
+            // Write the code to a temporary file
+            fs.writeFileSync(sourceFile, code);
 
-    // File paths for temporary source and executable files
-    const sourceFile = path.join(__dirname, "temp.cpp");
-    const executable = path.join(__dirname, "temp.exe");
+            // Compile the program
+            const compile = spawn("g++", [sourceFile, "-o", executable]);
 
-    // Write the code to the source file
-    fs.writeFileSync(sourceFile, code);
-
-    try {
-        // Compile the code
-        const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
-
-        let compileError = "";
-        compileProcess.stderr.on("data", (data) => {
-            compileError += data.toString();
-        });
-
-        compileProcess.on("close", (compileCode) => {
-            if (compileCode !== 0) {
-                // Compilation failed
-                cleanupFiles(sourceFile, executable);
-                return res.json({
-                    output: `Compilation Error:\n${compileError}`,
-                });
-            }
-
-            // Prepare inputs as a single string (simulate stdin)
-            const inputString = (inputs || []).join("\n") + "\n";
-
-            // If compilation succeeds, execute the code
-            const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
-
-            let processOutput = "";
-            let executionError = "";
-
-            // Handle standard output
-            runProcess.stdout.on("data", (data) => {
-                processOutput += data.toString();
-            });
-
-            // Handle standard error
-            runProcess.stderr.on("data", (data) => {
-                executionError += data.toString();
-            });
-
-            // Pass inputs to the program
-            runProcess.stdin.write(inputString);
-            runProcess.stdin.end();
-
-            runProcess.on("close", (runCode) => {
-                cleanupFiles(sourceFile, executable);
-
-                if (runCode !== 0) {
-                    // Runtime error occurred
-                    return res.json({
-                        output: `Runtime Error:\n${executionError || "An error occurred during execution."}`,
-                    });
+            compile.on("close", (compileCode) => {
+                if (compileCode !== 0) {
+                    const compileError = fs.readFileSync(sourceFile + ".log", "utf8");
+                    ws.send(JSON.stringify({ type: "error", output: compileError }));
+                    return;
                 }
 
-                // Return the program output
-                res.json({
-                    output: processOutput || "No output received!",
+                // Run the compiled program
+                const run = spawn(executable);
+
+                run.stdout.on("data", (data) => {
+                    ws.send(JSON.stringify({ type: "output", output: data.toString() }));
+                });
+
+                run.stderr.on("data", (data) => {
+                    ws.send(JSON.stringify({ type: "error", output: data.toString() }));
+                });
+
+                run.on("close", () => {
+                    ws.send(JSON.stringify({ type: "done" }));
+                });
+
+                // Handle interactive input
+                ws.on("message", (inputMessage) => {
+                    const { type, input } = JSON.parse(inputMessage);
+
+                    if (type === "input") {
+                        run.stdin.write(input + "\n");
+                    }
                 });
             });
-        });
-    } catch (error) {
-        cleanupFiles(sourceFile, executable);
-        res.json({
-            output: `Server error: ${error.message}`,
-        });
-    }
+        }
+    });
 });
 
 // Start the server
-app.listen(port, () => {
-    console.log(`Server is running on http://localhost:${port}`);
+server.listen(3000, () => {
+    console.log("Server running on http://localhost:3000");
 });
