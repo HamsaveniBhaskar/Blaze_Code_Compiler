@@ -10,6 +10,31 @@ const port = 3000;
 // Middleware
 app.use(bodyParser.json());
 
+// Dummy C++ code for warm-up
+const dummyCode = `
+#include <iostream>
+int main() {
+    std::cout << "Warm-up successful" << std::endl;
+    return 0;
+}`;
+
+// File paths for temporary source and executable files
+const sourceFile = path.join(__dirname, "temp.cpp");
+const executable = path.join(__dirname, "temp.exe");
+
+// Periodic warm-up to prevent cold start delays
+function warmUp() {
+    fs.writeFileSync(sourceFile, dummyCode);
+
+    const compileProcess = spawn("g++", [sourceFile, "-o", executable]);
+    compileProcess.on("close", () => {
+        if (fs.existsSync(executable)) {
+            fs.unlinkSync(executable); // Clean up after warm-up
+        }
+    });
+}
+setInterval(warmUp, 60000); // Warm-up every 60 seconds
+
 // Utility function to clean up files
 function cleanupFiles(...files) {
     files.forEach((file) => {
@@ -27,10 +52,6 @@ app.post("/", (req, res) => {
     if (!code) {
         return res.status(400).json({ output: "Error: No code provided!" });
     }
-
-    // File paths for temporary source and executable files
-    const sourceFile = path.join(__dirname, "temp.cpp");
-    const executable = path.join(__dirname, "temp.exe");
 
     // Write the code to the source file
     fs.writeFileSync(sourceFile, code);
@@ -102,4 +123,5 @@ app.post("/", (req, res) => {
 // Start the server
 app.listen(port, () => {
     console.log(`Server is running on http://localhost:${port}`);
+    warmUp(); // Initial warm-up
 });
