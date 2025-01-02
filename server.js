@@ -79,10 +79,10 @@ app.post('/', async (req, res) => {
                 const endTime = performance.now();
                 const timeTaken = ((endTime - startTime) / 1000).toFixed(3); // Convert to seconds
 
-                // If there's an error, return it; otherwise, return the output and execution time
+                // Send the response including the message
                 res.json({
                     output: error || output.trim() || 'No output',
-                    status: '===Code Executed Successfully===',
+                    status: 'Code Executed Successfully', // Add this message explicitly
                     timeTaken: `${timeTaken} seconds`
                 });
 
