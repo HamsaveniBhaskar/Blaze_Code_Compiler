@@ -34,8 +34,8 @@ app.post("/", (req, res) => {
     }
 
     // File paths for temporary source and executable files
-    const sourceFile = path.join(__dirname, "temp.cpp");
-    const executable = path.join(__dirname, "temp.exe");
+    const sourceFile = path.join(__dirname, "main.cpp");
+    const executable = path.join(__dirname, "main.exe");
 
     // Write the code to the source file
     fs.writeFileSync(sourceFile, code);
