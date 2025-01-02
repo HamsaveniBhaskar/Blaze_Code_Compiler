@@ -23,7 +23,7 @@ function cleanupFiles(...files) {
 
 // POST endpoint to compile and execute C++ code
 app.post("/", (req, res) => {
-    const { code } = req.body;
+    const { code, inputs } = req.body; // inputs = array of input lines
 
     // Check if code is provided
     if (!code) {
@@ -55,6 +55,9 @@ app.post("/", (req, res) => {
                 });
             }
 
+            // Prepare inputs as a single string (simulate stdin)
+            const inputString = (inputs || []).join("\n") + "\n";
+
             // If compilation succeeds, execute the code
             const runProcess = spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] });
 
@@ -64,27 +67,31 @@ app.post("/", (req, res) => {
             // Handle standard output
             runProcess.stdout.on("data", (data) => {
                 processOutput += data.toString();
-                res.write(JSON.stringify({ output: processOutput })); // Stream output
             });
 
             // Handle standard error
             runProcess.stderr.on("data", (data) => {
                 executionError += data.toString();
-                res.write(JSON.stringify({ output: `Runtime Error:\n${executionError}` }));
             });
 
-            // Handle user input
-            req.on("data", (chunk) => {
-                runProcess.stdin.write(chunk);
-            });
-
-            req.on("end", () => {
-                runProcess.stdin.end();
-            });
+            // Pass inputs to the program
+            runProcess.stdin.write(inputString);
+            runProcess.stdin.end();
 
             runProcess.on("close", (runCode) => {
                 cleanupFiles(sourceFile, executable);
-                res.end(); // End the response stream
+
+                if (runCode !== 0) {
+                    // Runtime error occurred
+                    return res.json({
+                        output: `Runtime Error:\n${executionError || "An error occurred during execution."}`,
+                    });
+                }
+
+                // Return the program output
+                res.json({
+                    output: processOutput || "No output received!",
+                });
             });
         });
     } catch (error) {
