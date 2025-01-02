@@ -75,7 +75,7 @@ app.post('/', async (req, res) => {
                 // If there's an error, return it; otherwise, return the output and execution time
                 res.json({
                     output: error || output.trim() || 'No output',
-                    status: 'Code Executed Successfully',
+                    status: '==Code Executed Successfully==',
                     timeTaken: `${timeTaken} seconds`
                 });
 
