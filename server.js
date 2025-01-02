@@ -28,13 +28,16 @@ app.post('/', async (req, res) => {
         const startTime = performance.now();
 
         // Compile the C++ code
+        console.log('Starting Compilation...');
         const compileProcess = spawn('g++', [sourceFile, '-o', executable, '-std=c++17', '-O2']);
 
         compileProcess.on('close', (compileCode) => {
             if (compileCode !== 0) {
+                console.error('Compilation failed');
                 return res.json({ output: 'Compilation failed!' });
             }
 
+            console.log('Compilation Successful, Starting Execution...');
             // Execute the compiled program
             const runProcess = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'] });
 
@@ -43,6 +46,7 @@ app.post('/', async (req, res) => {
 
             // Send input to the program's stdin
             if (input) {
+                console.log(`Sending input to the program: ${input}`);
                 runProcess.stdin.write(input + '\n');
             }
             runProcess.stdin.end();
@@ -50,13 +54,16 @@ app.post('/', async (req, res) => {
             // Collect program output and error
             runProcess.stdout.on('data', (data) => {
                 output += data.toString();
+                console.log(`stdout: ${data.toString()}`);
             });
             runProcess.stderr.on('data', (data) => {
                 error += data.toString();
+                console.error(`stderr: ${data.toString()}`);
             });
 
             // Add timeout to prevent hanging
             const timeout = setTimeout(() => {
+                console.log('Execution timed out');
                 runProcess.kill(); // Terminate the process if it takes too long
                 res.json({ output: 'Error: Execution timeout' });
 
@@ -75,7 +82,7 @@ app.post('/', async (req, res) => {
                 // If there's an error, return it; otherwise, return the output and execution time
                 res.json({
                     output: error || output.trim() || 'No output',
-                    status: '==Code Executed Successfully==',
+                    status: '===Code Executed Successfully===',
                     timeTaken: `${timeTaken} seconds`
                 });
 
@@ -85,6 +92,7 @@ app.post('/', async (req, res) => {
             });
         });
     } catch (err) {
+        console.error('Error during execution:', err);
         res.json({ output: `Error: ${err.message}` });
 
         // Clean up files
