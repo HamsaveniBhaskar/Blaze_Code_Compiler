@@ -34,7 +34,7 @@ app.post("/", (req, res) => {
     }
 
     // Create a worker thread for compilation
-    const worker = new Worker("./compiler-worker.js", {
+    const worker = new Worker("compiler-worker.js", {
         workerData: { code, input },
     });
 
