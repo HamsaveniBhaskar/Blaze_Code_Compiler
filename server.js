@@ -3,6 +3,7 @@ const bodyParser = require("body-parser");
 const { Worker } = require("worker_threads");
 const cors = require("cors");
 const crypto = require("crypto");
+const http = require("http");
 
 const app = express();
 const port = 3000;
@@ -15,6 +16,18 @@ app.use(bodyParser.json());
 
 // In-memory cache to store compiled results
 const cache = new Map();
+const CACHE_EXPIRATION_TIME = 60 * 60 * 1000; // 1 hour
+const MAX_CACHE_SIZE = 100;
+
+// Helper to clean up the cache periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, { timestamp }] of cache.entries()) {
+        if (now - timestamp > CACHE_EXPIRATION_TIME) {
+            cache.delete(key);
+        }
+    }
+}, 60000); // Run every minute
 
 // POST endpoint for code compilation and execution
 app.post("/", (req, res) => {
@@ -30,18 +43,23 @@ app.post("/", (req, res) => {
 
     // Check if result is cached
     if (cache.has(codeHash)) {
-        return res.json({ output: cache.get(codeHash) });
+        return res.json({ output: cache.get(codeHash).result });
     }
 
     // Create a worker thread for compilation
-    const worker = new Worker("compiler-worker.js", {
+    const worker = new Worker("./compiler-worker.js", {
         workerData: { code, input },
     });
 
     worker.on("message", (result) => {
-        // Cache the result and send the response
+        // Cache the result if successful
         if (result.output) {
-            cache.set(codeHash, result.output);
+            if (cache.size >= MAX_CACHE_SIZE) {
+                // Remove the oldest cache entry
+                const oldestKey = [...cache.keys()][0];
+                cache.delete(oldestKey);
+            }
+            cache.set(codeHash, { result: result.output, timestamp: Date.now() });
         }
         res.json(result);
     });
@@ -57,11 +75,17 @@ app.post("/", (req, res) => {
     });
 });
 
-// Keep the server "warm" by pinging it every 5 minutes
+// Health check endpoint
+app.get("/health", (req, res) => {
+    res.json({ status: "Server is running" });
+});
+
+// Self-pinging mechanism to keep the server alive
 setInterval(() => {
-    const http = require("http");
-    http.get(`http://localhost:${port}`, () => {});
-}, 300000); // Ping every 5 minutes
+    http.get(`http://localhost:${port}/health`, (res) => {
+        console.log("Health check pinged!");
+    });
+}, 5 * 60 * 1000); // Ping every 5 minutes
 
 // Start the server
 app.listen(port, () => {
